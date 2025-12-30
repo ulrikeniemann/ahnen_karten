@@ -1,0 +1,167 @@
+---
+title: "Ahnen Familie Niemann - Karten"
+format: 
+  html: 
+    theme: minty
+    include-in-header: header.html
+    code-fold: true
+    highlight-style: github
+    toc: true
+    css: styles.css
+    grid:
+      body-width: 1100px
+  docx: default
+execute:
+  echo: false
+  warning: false
+---
+
+```{r setup}
+# librarys laden
+packages <- c("tidyverse", "readxl", "leaflet", "leaflet.minicharts")
+packages <- rev(packages)
+for (package in packages) {
+    if (!require(package, character.only = TRUE)) {
+        install.packages(package, character.only = TRUE)
+    }
+    library(package, character.only = TRUE)
+}
+rm(packages, package)
+```
+
+```{r data}
+# Daten laden
+data <- read_excel("./data/AHNEN_2026.xlsx", sheet = "Karten")
+data <- data |>
+  rename(
+    lat1 = `LAT GebOrt`,
+    lon1 = `LON GebTag`,
+    lat2 = `LAT Sterbe`,
+    lon2 = `LON Sterbe`
+  )
+# leichtes Rauschen
+data <- data |>
+  mutate(
+    lat1x = jitter(lat1, factor = 1),
+    lon1x = jitter(lon1, factor = 1),
+    lat2x = jitter(lat2, factor = 1),
+    lon2x = jitter(lon2, factor = 1)
+  )
+```
+
+# V1: Geburtsorte / Hintergründe
+
+Varianten verschiedener Hintergründe
+
+siehe auch hier http://leaflet-extras.github.io/leaflet-providers/preview/
+
+
+```{r }
+leaflet(data |> filter(!is.na(lon1))) |>
+  addTiles() |>
+  addProviderTiles("OpenStreetMap.DE") |>
+  addCircleMarkers(~lon1x, ~lat1x, radius = 4,
+                   fillColor = "green", fillOpacity = 0.7,
+                   weight = 1, popup = ~str_c(Vorname, " ", Name))
+```
+\
+```{r }
+leaflet(data |> filter(!is.na(lon1))) |>
+  addTiles() |>
+  addProviderTiles("OpenTopoMap") |>
+  addCircleMarkers(~lon1x, ~lat1x, radius = 4,
+                   fillColor = "green", fillOpacity = 0.7,
+                   weight = 1, popup = ~str_c(Vorname, " ", Name))
+```
+\
+```{r }
+# leaflet(data |> filter(!is.na(lon1))) |>
+#   addTiles() |>
+#   addProviderTiles("Stadia.StamenWatercolor") |>
+#   addCircleMarkers(~lon1x, ~lat1x, radius = 4,
+#                    fillColor = "green", fillOpacity = 0.7,
+#                    weight = 1, popup = ~str_c(Vorname, " ", Name))
+```
+```{r }
+# leaflet(data |> filter(!is.na(lon1))) |>
+#   addTiles() |>
+#   addProviderTiles("Jawg.Terrain") |>
+#   addCircleMarkers(~lon1x, ~lat1x, radius = 4,
+#                    fillColor = "green", fillOpacity = 0.7,
+#                    weight = 1, popup = ~str_c(Vorname, " ", Name))
+```
+\
+```{r }
+leaflet(data |> filter(!is.na(lon1))) |>
+  addTiles() |>
+  addProviderTiles("Esri.WorldImagery") |>
+  addCircleMarkers(~lon1x, ~lat1x, radius = 4,
+                   fillColor = "green", fillOpacity = 0.7,
+                   weight = 1, popup = ~str_c(Vorname, " ", Name))
+```
+\
+```{r }
+leaflet(data |> filter(!is.na(lon1))) |>
+  addTiles() |>
+  addProviderTiles("Esri.NatGeoWorldMap") |>
+  addCircleMarkers(~lon1x, ~lat1x, radius = 4,
+                   fillColor = "green", fillOpacity = 0.7,
+                   weight = 1, popup = ~str_c(Vorname, " ", Name))
+```
+
+# V2: Geburtsorte nach Linie
+
+ToDo: Versatz nur im starkem Zoom sichtbar, ggf. noch weiter vesetzen?
+
+```{r }
+col <- c("red", "grey", "blue")
+lev <- unique(data$Linie)
+cols <- colorFactor(palette = col, unique(data$Linie))
+
+leaflet(data |> filter(!is.na(lon1))) |>
+  addTiles() |>
+  addProviderTiles("OpenStreetMap.DE") |>
+  addCircleMarkers(
+    ~lon1x,
+    ~lat1x,
+    radius = 3,
+    fillColor = ~ cols(Linie),
+    fillOpacity = 0.8,
+    weight = 1,
+    popup = ~ str_c(Vorname, " ", Name)
+  ) |>
+  addLegend(
+    'bottomright',
+    pal = cols,
+    values = lev,
+    title = 'Linie',
+    opacity = 1
+  )
+```
+
+# V3: Pfeile
+
+Erster Versuch mit leaflet.minicharts -> nicht optimal
+
+(Entfernung Geburts-/Sterbeort > 20 km)
+
+```{r}
+#library(leaflet.minicharts)
+dat <- data|> 
+  filter(!is.na(lon1) & 
+  !is.na(lon2) &
+  `Entf. GebOrt - SterbeOrt` > 20)
+leaflet(dat) |>
+  addTiles() |>
+  addFlows(
+    lng0 = dat$lon1x, lat0 = dat$lat1x, # Startpunkte
+    lng1 = dat$lon2x, lat1 = dat$lat2x, # Endpunkte
+    color = "blue",
+    flow = 1,              # Bestimmt die Richtung (1 = Start zu Ende)
+    minThickness = 2, 
+    maxThickness = 2       # Konstante Dicke
+  )
+
+```
+
+
