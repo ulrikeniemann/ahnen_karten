@@ -18,7 +18,10 @@ execute:
 
 ```{r setup}
 # librarys laden
-packages <- c("tidyverse", "readxl", "leaflet", "leaflet.minicharts")
+packages <- c("tidyverse", "readxl", "leaflet", 
+              "leaflet.minicharts", # Pfeile V1
+              "sf", "rnaturalearth" # Pfeile V2
+              )
 packages <- rev(packages)
 for (package in packages) {
     if (!require(package, character.only = TRUE)) {
@@ -49,7 +52,7 @@ data <- data |>
   )
 ```
 
-# V1: Geburtsorte / Hintergründe
+# Geburtsorte
 
 Varianten verschiedener Hintergründe
 
@@ -73,25 +76,7 @@ leaflet(data |> filter(!is.na(lon1))) |>
                    fillColor = "green", fillOpacity = 0.7,
                    weight = 1, popup = ~str_c(Vorname, " ", Name))
 ```
-\
-```{r }
-# leaflet(data |> filter(!is.na(lon1))) |>
-#   addTiles() |>
-#   addProviderTiles("Stadia.StamenWatercolor") |>
-#   addCircleMarkers(~lon1x, ~lat1x, radius = 4,
-#                    fillColor = "green", fillOpacity = 0.7,
-#                    weight = 1, popup = ~str_c(Vorname, " ", Name))
-```
-```{r }
-# leaflet(data |> filter(!is.na(lon1))) |>
-#   addTiles() |>
-#   addProviderTiles("Jawg.Terrain") |>
-#   addCircleMarkers(~lon1x, ~lat1x, radius = 4,
-#                    fillColor = "green", fillOpacity = 0.7,
-#                    weight = 1, popup = ~str_c(Vorname, " ", Name))
-```
-\
-```{r }
+```{r eval=FALSE }
 leaflet(data |> filter(!is.na(lon1))) |>
   addTiles() |>
   addProviderTiles("Esri.WorldImagery") |>
@@ -100,7 +85,7 @@ leaflet(data |> filter(!is.na(lon1))) |>
                    weight = 1, popup = ~str_c(Vorname, " ", Name))
 ```
 \
-```{r }
+```{r eval=FALSE }
 leaflet(data |> filter(!is.na(lon1))) |>
   addTiles() |>
   addProviderTiles("Esri.NatGeoWorldMap") |>
@@ -109,7 +94,7 @@ leaflet(data |> filter(!is.na(lon1))) |>
                    weight = 1, popup = ~str_c(Vorname, " ", Name))
 ```
 
-# V2: Geburtsorte nach Linie
+# Geburtsorte nach Linie
 
 ToDo: Versatz nur im starkem Zoom sichtbar, ggf. noch weiter vesetzen?
 
@@ -139,7 +124,7 @@ leaflet(data |> filter(!is.na(lon1))) |>
   )
 ```
 
-# V3: Pfeile
+# Pfeile V1
 
 Erster Versuch mit leaflet.minicharts -> nicht optimal
 
@@ -164,4 +149,43 @@ leaflet(dat) |>
 
 ```
 
+# Pfeile V2
+
+Mit ggplot, eingefärbt nach Linie
+
+```{r}
+germany <- ne_countries(scale = "medium", country = "Germany", returnclass = "sf")
+
+dat <- data |>
+  filter(!is.na(lon1) & !is.na(lon2) & `Entf. GebOrt - SterbeOrt` > 20)
+
+ggplot() +
+  geom_sf(data = germany, fill = "grey95") + 
+  labs(title = "Geburtsort ---> Sterbeort") +
+  geom_curve(
+    data = dat,
+    aes(
+      x = lon1x, y = lat1x,
+      xend = lon2x, yend = lat2x,
+      color = Linie
+    ),
+    arrow = arrow(length = unit(0.2, "cm"), type = "closed"),
+    #color = "blue",
+    curvature = 0.2,
+    size = 0.7
+  ) +
+  # Legende für die Farben der Pfeile
+  scale_color_manual(
+    #name = "Linie",
+    values = c("Vaterlinie" = "blue", "Mutterlinie" = "red")
+  ) +
+  theme_minimal() +
+  # alle gitternetzlinien und Achsen entfernen
+  theme(
+    panel.grid = element_blank(),
+    axis.title = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank()
+  )
+```
 
