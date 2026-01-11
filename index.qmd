@@ -21,6 +21,7 @@ execute:
 packages <- c("tidyverse", "readxl", "leaflet", 
               "leaflet.minicharts", # Pfeile V1
               "sf", "rnaturalearth" # Pfeile V2
+              , "geosphere"
               )
 packages <- rev(packages)
 for (package in packages) {
@@ -34,14 +35,38 @@ rm(packages, package)
 
 ```{r data}
 # Daten laden
-data <- read_excel("./data/AHNEN_2026.xlsx", sheet = "Karten")
+
+# V1 - ohne Generation
+# data <- read_excel("./data/AHNEN_2026.xlsx", sheet = "Karten") # V1
+# data <- data |>
+#   reNAME(
+#     lat1 = `LAT GebOrt`,
+#     lon1 = `LON GebTag`,
+#     lat2 = `LAT Sterbe`,
+#     lon2 = `LON Sterbe`
+#   )
+
+# V2 - inkl. Generation
+data <- read_excel("./data/Karten2026.xlsx")
+
+# parse numbers
+data <- data |> 
+  mutate(
+    lat1 = `LAT GEB` |> parse_number(),
+    lon1 = `LON GEB` |> parse_number(),
+    lat2 = `LAT TOD` |> parse_number(),
+    lon2 = `LON TOD` |> parse_number()
+    )
+
+# berechne die Distanz zwischen Geburts- und Sterbeort in km
 data <- data |>
-  rename(
-    lat1 = `LAT GebOrt`,
-    lon1 = `LON GebTag`,
-    lat2 = `LAT Sterbe`,
-    lon2 = `LON Sterbe`
+  mutate(
+    `Entf. GebOrt - SterbeOrt` = geosphere::distHaversine(
+      matrix(c(lon1, lat1), ncol = 2),
+      matrix(c(lon2, lat2), ncol = 2)
+    ) / 1000
   )
+
 # leichtes Rauschen
 data <- data |>
   mutate(
@@ -52,74 +77,139 @@ data <- data |>
   )
 ```
 
-# Geburtsorte
+# Geburtsorte + Layer-Symbol: verschiedene Hintergründe
+
 
 Varianten verschiedener Hintergründe
 
 siehe auch hier http://leaflet-extras.github.io/leaflet-providers/preview/
 
+hier ist auch mal diese Lizenz-Zeile unten ausgeblendet (für Druck besser?)
 
 ```{r }
-leaflet(data |> filter(!is.na(lon1))) |>
+leaflet(options = leafletOptions(attributionControl = FALSE),
+data |> filter(!is.na(lon1))) |>
   addTiles() |>
   addProviderTiles("OpenStreetMap.DE") |>
+  addTiles(
+    urlTemplate = "https://sgx.geodatenzentrum.de/wmts_topplus_open/tile/1.0.0/web/default/WEBMERCATOR/{z}/{y}/{x}.png",
+    attribution = '© dl-de/by-2-0',
+    group = "TopPlusOpen.Color"
+  ) |> 
+    addProviderTiles("Esri.WorldImagery", group = "Satellit") |> 
+  addProviderTiles("OpenTopoMap", group = "OpenTopoMap") |> 
+  addProviderTiles("Esri.WorldImagery", group = "Esri.WorldImagery") |> 
+  #addProviderTiles("MtbMap", group = "MtbMap") |> 
+    addTiles(
+    urlTemplate = "http://tile.mtbmap.cz/mtbmap_tiles/{z}/{x}/{y}.png",
+    attribution = '© dl-de/by-2-0',
+    group = "MtbMap"
+  ) |> 
+    addProviderTiles("CartoDB.PositronNoLabels", group = "CartoDB.PositronNoLabels") |> 
+    addProviderTiles("Stadia.StamenToner", group = "Stadia.StamenToner") |> 
+   #
+   addLayersControl(
+    baseGroups = c("TopPlusOpen.Color", "OpenStreetMap", "Satellit", "OpenTopoMap", "Esri.WorldImagery", "MtbMap", "CartoDB.PositronNoLabels",
+    "Stadia.StamenToner"),
+    position = "topleft"
+  ) |> 
   addCircleMarkers(~lon1x, ~lat1x, radius = 4,
                    fillColor = "green", fillOpacity = 0.7,
-                   weight = 1, popup = ~str_c(Vorname, " ", Name))
+                   weight = 1, popup = ~str_c(VORNAME, " ", NAME))
 ```
 \
-```{r }
-leaflet(data |> filter(!is.na(lon1))) |>
-  addTiles() |>
-  addProviderTiles("OpenTopoMap") |>
-  addCircleMarkers(~lon1x, ~lat1x, radius = 4,
-                   fillColor = "green", fillOpacity = 0.7,
-                   weight = 1, popup = ~str_c(Vorname, " ", Name))
-```
-```{r eval=FALSE }
-leaflet(data |> filter(!is.na(lon1))) |>
-  addTiles() |>
-  addProviderTiles("Esri.WorldImagery") |>
-  addCircleMarkers(~lon1x, ~lat1x, radius = 4,
-                   fillColor = "green", fillOpacity = 0.7,
-                   weight = 1, popup = ~str_c(Vorname, " ", Name))
-```
-\
-```{r eval=FALSE }
-leaflet(data |> filter(!is.na(lon1))) |>
-  addTiles() |>
-  addProviderTiles("Esri.NatGeoWorldMap") |>
-  addCircleMarkers(~lon1x, ~lat1x, radius = 4,
-                   fillColor = "green", fillOpacity = 0.7,
-                   weight = 1, popup = ~str_c(Vorname, " ", Name))
-```
 
-# Geburtsorte nach Linie
+# Geburtsorte nach LINIE
 
-ToDo: Versatz nur im starkem Zoom sichtbar, ggf. noch weiter vesetzen?
+## V1 - inverser Rand 
 
 ```{r }
-col <- c("red", "grey", "blue")
-lev <- unique(data$Linie)
-cols <- colorFactor(palette = col, unique(data$Linie))
+col <- c("red", "blue")
+lev <- unique(data$LINIE)
+lev <- lev[!is.na(lev)]
+cols <- colorFactor(palette = col, unique(na.omit(data$LINIE)))
 
 leaflet(data |> filter(!is.na(lon1))) |>
   addTiles() |>
-  addProviderTiles("OpenStreetMap.DE") |>
+  #addProviderTiles("OpenStreetMap.DE") |>
+  addTiles(
+    urlTemplate = "https://sgx.geodatenzentrum.de/wmts_topplus_open/tile/1.0.0/web/default/WEBMERCATOR/{z}/{y}/{x}.png",
+    attribution = '© dl-de/by-2-0',
+    group = "TopPlusOpen.Color"
+  ) |> 
   addCircleMarkers(
     ~lon1x,
     ~lat1x,
     radius = 3,
-    fillColor = ~ cols(Linie),
+    fillColor = ~ cols(LINIE),
+    color = c("red", "blue"),
     fillOpacity = 0.8,
     weight = 1,
-    popup = ~ str_c(Vorname, " ", Name)
+    popup = ~ str_c(VORNAME, " ", NAME)
   ) |>
   addLegend(
     'bottomright',
     pal = cols,
     values = lev,
-    title = 'Linie',
+    title = 'LINIE',
+    opacity = 1
+  )
+
+```
+## V2 schwarzer Rand
+
+```{r }
+  leaflet(data |> filter(!is.na(lon1))) |>
+  addTiles() |>
+  addTiles(
+    urlTemplate = "https://sgx.geodatenzentrum.de/wmts_topplus_open/tile/1.0.0/web/default/WEBMERCATOR/{z}/{y}/{x}.png",
+    attribution = '© dl-de/by-2-0',
+    group = "TopPlusOpen.Color"
+  ) |> 
+  addCircleMarkers(
+    ~lon1x,
+    ~lat1x,
+    radius = 3,
+    fillColor = ~ cols(LINIE),
+    color = c("black", "black"),
+    fillOpacity = 0.8,
+    weight = 1,
+    popup = ~ str_c(VORNAME, " ", NAME)
+  ) |>
+  addLegend(
+    'bottomright',
+    pal = cols,
+    values = lev,
+    title = 'LINIE',
+    opacity = 1
+  )
+```
+
+## V3 kein Rand
+
+```{r }
+  leaflet(data |> filter(!is.na(lon1))) |>
+  addTiles() |>
+  addTiles(
+    urlTemplate = "https://sgx.geodatenzentrum.de/wmts_topplus_open/tile/1.0.0/web/default/WEBMERCATOR/{z}/{y}/{x}.png",
+    attribution = '© dl-de/by-2-0',
+    group = "TopPlusOpen.Color"
+  ) |> 
+  addCircleMarkers(
+    ~lon1x,
+    ~lat1x,
+    radius = 3,
+    fillColor = ~ cols(LINIE),
+    color = none,
+    fillOpacity = 0.8,
+    weight = 1,
+    popup = ~ str_c(VORNAME, " ", NAME)
+  ) |>
+  addLegend(
+    'bottomright',
+    pal = cols,
+    values = lev,
+    title = 'LINIE',
     opacity = 1
   )
 ```
@@ -151,13 +241,10 @@ leaflet(dat) |>
 
 # Pfeile V2
 
-Mit ggplot, eingefärbt nach Linie
+Mit ggplot, eingefärbt nach LINIE
 
 ```{r}
 germany <- ne_countries(scale = "medium", country = "Germany", returnclass = "sf")
-
-dat <- data |>
-  filter(!is.na(lon1) & !is.na(lon2) & `Entf. GebOrt - SterbeOrt` > 20)
 
 ggplot() +
   geom_sf(data = germany, fill = "grey95") + 
@@ -167,7 +254,7 @@ ggplot() +
     aes(
       x = lon1x, y = lat1x,
       xend = lon2x, yend = lat2x,
-      color = Linie
+      color = LINIE
     ),
     arrow = arrow(length = unit(0.2, "cm"), type = "closed"),
     #color = "blue",
@@ -176,11 +263,11 @@ ggplot() +
   ) +
   # Legende für die Farben der Pfeile
   scale_color_manual(
-    #name = "Linie",
+    #NAME = "LINIE",
     values = c("Vaterlinie" = "blue", "Mutterlinie" = "red")
   ) +
   theme_minimal() +
-  # alle gitternetzlinien und Achsen entfernen
+  # alle gitternetzLINIEn und Achsen entfernen
   theme(
     panel.grid = element_blank(),
     axis.title = element_blank(),
