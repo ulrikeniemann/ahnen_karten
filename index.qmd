@@ -36,16 +36,6 @@ rm(packages, package)
 ```{r data}
 # Daten laden
 
-# V1 - ohne Generation
-# data <- read_excel("./data/AHNEN_2026.xlsx", sheet = "Karten") # V1
-# data <- data |>
-#   reNAME(
-#     lat1 = `LAT GebOrt`,
-#     lon1 = `LON GebTag`,
-#     lat2 = `LAT Sterbe`,
-#     lon2 = `LON Sterbe`
-#   )
-
 # V2 - inkl. Generation
 data <- read_excel("./data/Karten2026.xlsx")
 
@@ -68,13 +58,30 @@ data <- data |>
   )
 
 # leichtes Rauschen
+# data <- data |>
+#   mutate(
+#     lat1x = jitter(lat1, factor = 1),
+#     lon1x = jitter(lon1, factor = 1),
+#     lat2x = jitter(lat2, factor = 1),
+#     lon2x = jitter(lon2, factor = 1)
+#   )
+
+# ohne Rauschen - auf den x-Variablen bleiben damit das nicht ersetzt werden muss
 data <- data |>
   mutate(
-    lat1x = jitter(lat1, factor = 1),
-    lon1x = jitter(lon1, factor = 1),
-    lat2x = jitter(lat2, factor = 1),
-    lon2x = jitter(lon2, factor = 1)
+    lat1x = lat1,
+    lon1x = lon1,
+    lat2x = lat2,
+    lon2x = lon2
   )
+
+# Geburtsorte zusammenfassen für größenveränderte Punkte
+datGeb <- data |>
+  filter(!is.na(lon1)) |>
+  group_by(LINIE, lon1x, lat1x) |>
+  summarise(count = n(), .groups = "drop") |> 
+  mutate(size = (count / 2) + 2.5)
+
 ```
 
 # Geburtsorte + Layer-Symbol: verschiedene Hintergründe
@@ -87,8 +94,7 @@ siehe auch hier http://leaflet-extras.github.io/leaflet-providers/preview/
 hier ist auch mal diese Lizenz-Zeile unten ausgeblendet (für Druck besser?)
 
 ```{r }
-leaflet(options = leafletOptions(attributionControl = FALSE),
-data |> filter(!is.na(lon1))) |>
+leaflet(options = leafletOptions(attributionControl = FALSE), datGeb) |>
   addTiles() |>
   addProviderTiles("OpenStreetMap.DE") |>
   addTiles(
@@ -113,9 +119,9 @@ data |> filter(!is.na(lon1))) |>
     "Stadia.StamenToner"),
     position = "topleft"
   ) |> 
-  addCircleMarkers(~lon1x, ~lat1x, radius = 4,
+  addCircleMarkers(~lon1x, ~lat1x, radius = ~ size,
                    fillColor = "green", fillOpacity = 0.7,
-                   weight = 1, popup = ~str_c(VORNAME, " ", NAME))
+                   weight = 1, popup = ~ as.character(count))
 ```
 \
 
@@ -124,12 +130,12 @@ data |> filter(!is.na(lon1))) |>
 ## V1 - inverser Rand 
 
 ```{r }
-col <- c("red", "blue")
+col <- c("red", "#469bf2")
 lev <- unique(data$LINIE)
 lev <- lev[!is.na(lev)]
 cols <- colorFactor(palette = col, unique(na.omit(data$LINIE)))
 
-leaflet(data |> filter(!is.na(lon1))) |>
+leaflet(datGeb) |>
   addTiles() |>
   #addProviderTiles("OpenStreetMap.DE") |>
   addTiles(
@@ -140,12 +146,12 @@ leaflet(data |> filter(!is.na(lon1))) |>
   addCircleMarkers(
     ~lon1x,
     ~lat1x,
-    radius = 3,
+    radius = ~ size,
     fillColor = ~ cols(LINIE),
-    color = c("red", "blue"),
+    color = c("red", "#469bf2"),
     fillOpacity = 0.8,
     weight = 1,
-    popup = ~ str_c(VORNAME, " ", NAME)
+    popup = ~ as.character(count)
   ) |>
   addLegend(
     'bottomright',
@@ -159,7 +165,7 @@ leaflet(data |> filter(!is.na(lon1))) |>
 ## V2 schwarzer Rand
 
 ```{r }
-  leaflet(data |> filter(!is.na(lon1))) |>
+  leaflet(datGeb) |>
   addTiles() |>
   addTiles(
     urlTemplate = "https://sgx.geodatenzentrum.de/wmts_topplus_open/tile/1.0.0/web/default/WEBMERCATOR/{z}/{y}/{x}.png",
@@ -169,12 +175,12 @@ leaflet(data |> filter(!is.na(lon1))) |>
   addCircleMarkers(
     ~lon1x,
     ~lat1x,
-    radius = 3,
+    radius = ~ size,
     fillColor = ~ cols(LINIE),
     color = c("black", "black"),
     fillOpacity = 0.8,
     weight = 1,
-    popup = ~ str_c(VORNAME, " ", NAME)
+    popup = ~ as.character(count)
   ) |>
   addLegend(
     'bottomright',
@@ -188,7 +194,7 @@ leaflet(data |> filter(!is.na(lon1))) |>
 ## V3 kein Rand
 
 ```{r }
-  leaflet(data |> filter(!is.na(lon1))) |>
+  leaflet(datGeb) |>
   addTiles() |>
   addTiles(
     urlTemplate = "https://sgx.geodatenzentrum.de/wmts_topplus_open/tile/1.0.0/web/default/WEBMERCATOR/{z}/{y}/{x}.png",
@@ -198,12 +204,12 @@ leaflet(data |> filter(!is.na(lon1))) |>
   addCircleMarkers(
     ~lon1x,
     ~lat1x,
-    radius = 3,
+    radius = ~ size,
     fillColor = ~ cols(LINIE),
     color = none,
     fillOpacity = 0.8,
     weight = 1,
-    popup = ~ str_c(VORNAME, " ", NAME)
+    popup = ~ as.character(count)
   ) |>
   addLegend(
     'bottomright',
@@ -257,14 +263,14 @@ ggplot() +
       color = LINIE
     ),
     arrow = arrow(length = unit(0.2, "cm"), type = "closed"),
-    #color = "blue",
+    #color = "#469bf2",
     curvature = 0.2,
     size = 0.7
   ) +
   # Legende für die Farben der Pfeile
   scale_color_manual(
     #NAME = "LINIE",
-    values = c("Vaterlinie" = "blue", "Mutterlinie" = "red")
+    values = c("Vaterlinie" = "#469bf2", "Mutterlinie" = "red")
   ) +
   theme_minimal() +
   # alle gitternetzLINIEn und Achsen entfernen
