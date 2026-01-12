@@ -75,3 +75,23 @@ ggplot() +
 
   ##############################################################################
 
+# Test: Größe der Bubble nach Anzahl Menschen
+datGeb <- data |>
+  filter(!is.na(lon1)) |>
+  group_by(LINIE, lon1x, lat1x) |>
+  summarise(count = n(), .groups = "drop") |> 
+  mutate(size = (count / 4) + 2.75)
+
+leaflet(datGeb) |>
+  addTiles() |>
+  addProviderTiles("OpenStreetMap.DE") |>
+  addCircleMarkers(
+    ~lon1x,
+    ~lat1x,
+    radius = ~ size,
+    fillColor = ~ LINIE,
+    color = c("red", "#469bf2"),
+    fillOpacity = 0.8,
+    weight = 1,
+    popup = ~ count
+  )
