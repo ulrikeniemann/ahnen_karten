@@ -95,3 +95,118 @@ leaflet(datGeb) |>
     weight = 1,
     popup = ~ count
   )
+
+
+
+# ------------------------------------------------------------------------------
+
+add_custom_layers <- function(map) {
+  map |>
+  addTiles() |>
+  addProviderTiles("OpenStreetMap.DE") |>
+  addTiles(
+    urlTemplate = "https://sgx.geodatenzentrum.de/wmts_topplus_open/tile/1.0.0/web/default/WEBMERCATOR/{z}/{y}/{x}.png",
+    attribution = '© dl-de/by-2-0',
+    group = "TopPlusOpen.Color"
+  ) |> 
+    addProviderTiles("Esri.WorldImagery", group = "Satellit") |> 
+  addProviderTiles("OpenTopoMap", group = "OpenTopoMap") |> 
+  addProviderTiles("Esri.WorldImagery", group = "Esri.WorldImagery") |> 
+    addTiles(
+    urlTemplate = "http://tile.mtbmap.cz/mtbmap_tiles/{z}/{x}/{y}.png",
+    attribution = '© dl-de/by-2-0',
+    group = "MtbMap"
+  ) |> 
+    addProviderTiles("CartoDB.PositronNoLabels", group = "CartoDB.PositronNoLabels") |> 
+    addProviderTiles("Stadia.StamenToner", group = "Stadia.StamenToner") |> 
+   #
+   addLayersControl(
+    baseGroups = c("TopPlusOpen.Color", "OpenStreetMap", "Satellit", "OpenTopoMap", "Esri.WorldImagery", "MtbMap", "CartoDB.PositronNoLabels",
+    "Stadia.StamenToner"),
+    position = "topleft"
+  )
+}
+
+leaflet() |> add_custom_layers()
+
+# ------------------------------------------------------------------------------
+
+addLegendCustom <- function(map, colors, labels, sizes = 10, borders = "black", opacities = 0.8) {
+  color_circle <- mapply(function(color, size, border, opacity) {
+    paste0(
+      "<div style='display: inline-block; width:", size, "px; height:", size, "px; 
+      border-radius: 50%; background:", color, "; border:1px solid ", border, 
+      "; opacity:", opacity, ";'></div>"
+    )
+  }, colors, sizes, borders, opacities, SIMPLIFY = FALSE)
+  
+  map %>% addLegend(
+    position = "bottomright",
+    colors = rep("transparent", length(colors)),
+    labels = paste0(unlist(color_circle), " ", labels),
+    opacity = 1
+  )
+}
+
+# Beispiel-Anwendung:
+leaflet() %>%
+  addTiles() %>%
+  addLegendCustom(
+    colors = c("blue", "red"),
+    labels = c("Vaterlinie", "Mutterlinie"),
+    sizes = c(16, 16),
+    borders = c("black", "black")
+  )
+
+# ------------------------------------------------------------------------------
+
+legend_html <- "
+<div style='background: white; padding: 8px; border-radius: 6px; box-shadow: 0 1px 5px rgba(0,0,0,0.65);'>
+  <span style='display: inline-block; width:16px; height:16px; border-radius:50%; background:#469bf2; border:1px solid black; opacity:0.8; vertical-align:middle;'></span>
+  Vaterlinie<br>
+  <span style='display: inline-block; width:16px; height:16px; border-radius:50%; background:red; border:1px solid black; opacity:0.8; vertical-align:middle;'></span>
+  Mutterlinie
+</div>
+"
+
+leaflet() %>%
+  addTiles() %>%
+  addControl(html = legend_html, position = "bottomright")
+
+
+
+# ------------------------------------------------------------------------------
+
+# Ensure GENERATION is numeric and drop NAs
+datGeb <- datGeb |> mutate(GENERATION = as.numeric(GENERATION))
+generationen <- sort(unique(na.omit(datGeb$GENERATION)))
+
+blues_15 <- rev(colorRampPalette(brewer.pal(9, "Blues"))(15))
+
+blues_pal <- colorBin(
+  palette = blues_15,
+  domain = generationen,
+  bins = 15,
+  pretty = FALSE
+)
+
+leaflet(datGeb) |>
+  add_custom_layers() |> 
+  addCircleMarkers(
+    ~lon1,
+    ~lat1,
+    radius = 4,
+    fillColor = ~ blues_pal(GENERATION),
+    color = "black",
+    fillOpacity = 0.8,
+    weight = 1,
+    popup = ~ str_c(VORNAME, " ", NAME)
+  ) |>
+  addLegend(
+    position = "bottomright",
+    pal = blues_pal,
+    values = generationen,
+    title = "Generation",
+    opacity = 1,
+    labFormat = function(type, cuts, p) as.character(01:14)
+  )

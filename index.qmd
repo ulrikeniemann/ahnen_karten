@@ -17,11 +17,13 @@ execute:
 ---
 
 ```{r setup}
+# ------------------------------------------------------------------------------
 # librarys laden
 packages <- c("tidyverse", "readxl", "leaflet", 
               "leaflet.minicharts", # Pfeile V1
               "sf", "rnaturalearth" # Pfeile V2
-              , "geosphere"
+              , "geosphere",
+              "RColorBrewer"
               )
 packages <- rev(packages)
 for (package in packages) {
@@ -34,6 +36,7 @@ rm(packages, package)
 ```
 
 ```{r data}
+# ------------------------------------------------------------------------------
 # Daten laden
 
 # V2 - inkl. Generation
@@ -58,76 +61,144 @@ data <- data |>
   )
 
 # leichtes Rauschen
-# data <- data |>
-#   mutate(
-#     lat1x = jitter(lat1, factor = 1),
-#     lon1x = jitter(lon1, factor = 1),
-#     lat2x = jitter(lat2, factor = 1),
-#     lon2x = jitter(lon2, factor = 1)
-#   )
-
-# ohne Rauschen - auf den x-Variablen bleiben damit das nicht ersetzt werden muss
 data <- data |>
   mutate(
-    lat1x = lat1,
-    lon1x = lon1,
-    lat2x = lat2,
-    lon2x = lon2
+    lat1x = jitter(lat1, factor = 1),
+    lon1x = jitter(lon1, factor = 1),
+    lat2x = jitter(lat2, factor = 1),
+    lon2x = jitter(lon2, factor = 1)
   )
 
+# ohne Rauschen - auf den x-Variablen bleiben damit das nicht ersetzt werden muss
+# data <- data |>
+#   mutate(
+#     lat1x = lat1,
+#     lon1x = lon1,
+#     lat2x = lat2,
+#     lon2x = lon2
+#   )
+
+# nur Geburtsorte
+datGeb <- data |> filter(!is.na(lon1))
+
 # Geburtsorte zusammenfassen für größenveränderte Punkte
-datGeb <- data |>
+datGebGroup <- data |>
   filter(!is.na(lon1)) |>
-  group_by(LINIE, lon1x, lat1x) |>
+  group_by(LINIE, lon1, lat1) |>
   summarise(count = n(), .groups = "drop") |> 
   mutate(size = (count / 2) + 2.5)
+```
+
+```{r functions}
+# ------------------------------------------------------------------------------
+# Layer als Variable speichern
+add_custom_layers <- function(map) {
+  map |> 
+    addTiles() |>
+    addProviderTiles("OpenStreetMap.DE") |>
+    addTiles(
+      urlTemplate = "https://sgx.geodatenzentrum.de/wmts_topplus_open/tile/1.0.0/web/default/WEBMERCATOR/{z}/{y}/{x}.png",
+      attribution = '© dl-de/by-2-0',
+      group = "TopPlusOpen.Color"
+    ) |> 
+      addProviderTiles("Esri.WorldImagery", group = "Satellit") |> 
+    addProviderTiles("OpenTopoMap", group = "OpenTopoMap") |> 
+    addProviderTiles("Esri.WorldImagery", group = "Esri.WorldImagery") |> 
+      addTiles(
+      urlTemplate = "http://tile.mtbmap.cz/mtbmap_tiles/{z}/{x}/{y}.png",
+      attribution = '© dl-de/by-2-0',
+      group = "MtbMap"
+    ) |> 
+      addProviderTiles("CartoDB.PositronNoLabels", group = "CartoDB.PositronNoLabels") |> 
+      addProviderTiles("Stadia.StamenToner", group = "Stadia.StamenToner") |> 
+    #
+    addLayersControl(
+      baseGroups = c("TopPlusOpen.Color", "OpenStreetMap", "Satellit", "OpenTopoMap", "Esri.WorldImagery", "MtbMap", "CartoDB.PositronNoLabels",
+      "Stadia.StamenToner"),
+      position = "topleft"
+    )
+}
+
+# Legende mit Kreisen
+addLegendCustom <- function(map, colors, labels, sizes = 10, borders = "black", opacities = 0.8) {
+  color_circle <- mapply(function(color, size, border, opacity) {
+    paste0(
+      "<div style='display: inline-block; width:", size, "px; height:", size, "px; 
+      border-radius: 50%; background:", color, "; border:1px solid ", border, 
+      "; opacity:", opacity, ";'></div>"
+    )
+  }, colors, sizes, borders, opacities, SIMPLIFY = FALSE)
+  
+  map %>% addLegend(
+    position = "bottomright",
+    colors = rep("transparent", length(colors)),
+    labels = paste0(unlist(color_circle), " ", labels),
+    opacity = 1
+  )
+}
 
 ```
 
-# Geburtsorte + Layer-Symbol: verschiedene Hintergründe
+<!-- ----------------------------------------------------------------------- -->
+
+# Geburtsorte 
 
 
-Varianten verschiedener Hintergründe
+Varianten verschiedener Hintergründe auswählbar (siehe Layer Symbol oben)
 
 siehe auch hier http://leaflet-extras.github.io/leaflet-providers/preview/
 
 hier ist auch mal diese Lizenz-Zeile unten ausgeblendet (für Druck besser?)
 
+### nicht gruppiert - ohne Versatz
+
+Pop-Up mit Vorname und Name 
+
 ```{r }
 leaflet(options = leafletOptions(attributionControl = FALSE), datGeb) |>
-  addTiles() |>
-  addProviderTiles("OpenStreetMap.DE") |>
-  addTiles(
-    urlTemplate = "https://sgx.geodatenzentrum.de/wmts_topplus_open/tile/1.0.0/web/default/WEBMERCATOR/{z}/{y}/{x}.png",
-    attribution = '© dl-de/by-2-0',
-    group = "TopPlusOpen.Color"
-  ) |> 
-    addProviderTiles("Esri.WorldImagery", group = "Satellit") |> 
-  addProviderTiles("OpenTopoMap", group = "OpenTopoMap") |> 
-  addProviderTiles("Esri.WorldImagery", group = "Esri.WorldImagery") |> 
-  #addProviderTiles("MtbMap", group = "MtbMap") |> 
-    addTiles(
-    urlTemplate = "http://tile.mtbmap.cz/mtbmap_tiles/{z}/{x}/{y}.png",
-    attribution = '© dl-de/by-2-0',
-    group = "MtbMap"
-  ) |> 
-    addProviderTiles("CartoDB.PositronNoLabels", group = "CartoDB.PositronNoLabels") |> 
-    addProviderTiles("Stadia.StamenToner", group = "Stadia.StamenToner") |> 
-   #
-   addLayersControl(
-    baseGroups = c("TopPlusOpen.Color", "OpenStreetMap", "Satellit", "OpenTopoMap", "Esri.WorldImagery", "MtbMap", "CartoDB.PositronNoLabels",
-    "Stadia.StamenToner"),
-    position = "topleft"
-  ) |> 
-  addCircleMarkers(~lon1x, ~lat1x, radius = ~ count, #size,
+  add_custom_layers() |> 
+  addCircleMarkers(~lon1, ~lat1, radius = 4,
+                  fillColor = "green", fillOpacity = 0.7,
+                  weight = 1, popup = ~str_c(VORNAME, " ", NAME))
+```
+
+### nicht gruppiert - mit Versatz
+
+Pop-Up mit Vorname und Name 
+
+den Versatz können wir auf Wunsch auch deutlich stärker machen
+
+```{r }
+leaflet(options = leafletOptions(attributionControl = FALSE), datGeb) |>
+  add_custom_layers() |> 
+    addCircleMarkers(~lon1x, ~lat1x, radius = 4,
+                   fillColor = "green", fillOpacity = 0.7,
+                   weight = 1, popup = ~str_c(VORNAME, " ", NAME))
+```
+
+### gruppiert - ohne Versatz
+
+hier: Daten gruppiert nach Geburtsorten mit Größe nach Anzahl der Geburten an diesem Ort
+
+Pop-Up mit Anzuhl der Geburten an diesem Ort
+
+```{r }
+leaflet(options = leafletOptions(attributionControl = FALSE), datGebGroup) |>
+  add_custom_layers() |> 
+  addCircleMarkers(~lon1, ~lat1, radius = ~ size,
                    fillColor = "green", fillOpacity = 0.7,
                    weight = 1, popup = ~ as.character(count))
-```
+```    
+
 \
+
+<!-- ----------------------------------------------------------------------- -->
 
 # Geburtsorte nach LINIE
 
-## V1 - inverser Rand 
+hier mit schwarzem Rand (richtig?)
+
+## gruppiert - ohne Versatz
 
 ```{r }
 col <- c("red", "#469bf2")
@@ -135,46 +206,11 @@ lev <- unique(data$LINIE)
 lev <- lev[!is.na(lev)]
 cols <- colorFactor(palette = col, unique(na.omit(data$LINIE)))
 
-leaflet(datGeb) |>
-  addTiles() |>
-  #addProviderTiles("OpenStreetMap.DE") |>
-  addTiles(
-    urlTemplate = "https://sgx.geodatenzentrum.de/wmts_topplus_open/tile/1.0.0/web/default/WEBMERCATOR/{z}/{y}/{x}.png",
-    attribution = '© dl-de/by-2-0',
-    group = "TopPlusOpen.Color"
-  ) |> 
+leaflet(datGebGroup) |>
+  add_custom_layers() |> 
   addCircleMarkers(
-    ~lon1x,
-    ~lat1x,
-    radius = ~ size,
-    fillColor = ~ cols(LINIE),
-    color = c("red", "#469bf2"),
-    fillOpacity = 0.8,
-    weight = 1,
-    popup = ~ as.character(count)
-  ) |>
-  addLegend(
-    'bottomright',
-    pal = cols,
-    values = lev,
-    title = 'LINIE',
-    opacity = 1
-  )
-
-```
-## V2 schwarzer Rand
-
-```{r }
-  leaflet(datGeb) |>
-  addTiles() |>
-  addTiles(
-    urlTemplate = "https://sgx.geodatenzentrum.de/wmts_topplus_open/tile/1.0.0/web/default/WEBMERCATOR/{z}/{y}/{x}.png",
-    attribution = '© dl-de/by-2-0',
-    group = "TopPlusOpen.Color"
-  ) |> 
-  addCircleMarkers(
-    ~lon1x,
-    ~lat1x,
+    ~lon1,
+    ~lat1,
     radius = ~ size,
     fillColor = ~ cols(LINIE),
     color = c("black", "black"),
@@ -186,48 +222,139 @@ leaflet(datGeb) |>
     'bottomright',
     pal = cols,
     values = lev,
-    title = 'LINIE',
+    #title = 'LINIE',
     opacity = 1
   )
 ```
 
-## V3 kein Rand
+## NICHT gruppiert - ohne Versatz
 
 ```{r }
-  leaflet(datGeb) |>
-  addTiles() |>
-  addTiles(
-    urlTemplate = "https://sgx.geodatenzentrum.de/wmts_topplus_open/tile/1.0.0/web/default/WEBMERCATOR/{z}/{y}/{x}.png",
-    attribution = '© dl-de/by-2-0',
-    group = "TopPlusOpen.Color"
-  ) |> 
+leaflet(datGeb) |>
+  add_custom_layers() |> 
   addCircleMarkers(
-    ~lon1x,
-    ~lat1x,
-    radius = ~ size,
+    ~lon1,
+    ~lat1,
+    radius = 4,
     fillColor = ~ cols(LINIE),
-    color = none,
+    color = c("black", "black"),
     fillOpacity = 0.8,
     weight = 1,
-    popup = ~ as.character(count)
+    popup = ~ str_c(VORNAME, " ", NAME)
   ) |>
   addLegend(
     'bottomright',
     pal = cols,
     values = lev,
-    title = 'LINIE',
+    #title = 'LINIE',
     opacity = 1
   )
 ```
+
+## NICHT gruppiert - mit Versatz, optionale Legende
+
+hier mal eine andere Legende mit Kreisen (den linken Rand kriege ich so auf die Schnelle nicht weg)
+
+```{r }
+size <- 12
+legend_html <- paste0("
+<div style='background: white; padding: 8px; border-radius: 6px; box-shadow: 0 1px 5px rgba(0,0,0,0.65);'>
+  <span style='display: inline-block; width:", size, "px; height:", size, "px; border-radius:50%; background:#469bf2; border:1px solid black; opacity:0.8; vertical-align:middle;'></span>
+  Vaterlinie<br>
+  <span style='display: inline-block; width:", size, "px; height:", size, "px; border-radius:50%; background:red; border:1px solid black; opacity:0.8; vertical-align:middle;'></span>
+  Mutterlinie
+</div>
+")
+
+leaflet(datGeb) |>
+  add_custom_layers() |> 
+  addCircleMarkers(
+    ~lon1x,
+    ~lat1x,
+    radius = 4,
+    fillColor = ~ cols(LINIE),
+    color = c("black", "black"),
+    fillOpacity = 0.8,
+    weight = 1,
+    popup = ~ str_c(VORNAME, " ", NAME)
+  ) |>
+  # addLegendCustom(
+  #   colors = col,
+  #   labels = c("Vaterlinie", "Mutterlinie")
+  # )
+  addControl(html = legend_html, position = "bottomright")
+```
+
+<!-- ----------------------------------------------------------------------- -->
+# Geburtsorte nach Generation
+
+```{r }
+
+# Ensure GENERATION is numeric and drop NAs
+datGeb <- datGeb |> mutate(GENERATION = as.numeric(GENERATION))
+generationen <- sort(unique(na.omit(datGeb$GENERATION)))
+
+blues_15 <- rev(colorRampPalette(brewer.pal(9, "Blues"))(15))
+
+blues_pal <- colorBin(
+  palette = blues_15,
+  domain = generationen,
+  bins = 15,
+  pretty = FALSE
+)
+
+
+# Ensure GENERATION is numeric and drop NAs
+datGeb <- datGeb |> mutate(GENERATION = as.numeric(GENERATION))
+generationen <- sort(unique(na.omit(datGeb$GENERATION)))
+
+blues_15 <- rev(colorRampPalette(brewer.pal(9, "Blues"))(15))
+
+blues_pal <- colorBin(
+  palette = blues_15,
+  domain = generationen,
+  bins = 15,
+  pretty = FALSE
+)
+
+leaflet(datGeb) |>
+  add_custom_layers() |> 
+  addCircleMarkers(
+    ~lon1,
+    ~lat1,
+    radius = 4,
+    fillColor = ~ blues_pal(GENERATION),
+    color = "black",
+    fillOpacity = 0.8,
+    weight = 1,
+    popup = ~ str_c(VORNAME, " ", NAME)
+  ) |>
+  addLegend(
+    position = "bottomright",
+    pal = blues_pal,
+    values = generationen,
+    title = "Generation",
+    opacity = 1,
+    labFormat = function(type, cuts, p) as.character(0:14)
+  )
+```
+
+<!-- ----------------------------------------------------------------------- -->
 
 # Pfeile V1
 
 Erster Versuch mit leaflet.minicharts -> nicht optimal
 
+es wäre hier nicht möglich die Pfeilspitzen ans Ende der Linie zu setzen..
+
 (Entfernung Geburts-/Sterbeort > 20 km)
 
+mit Versatz oder wie hier ohne??
+
+### eine Farbe
+
 ```{r}
-#library(leaflet.minicharts)
+
 dat <- data|> 
   filter(!is.na(lon1) & 
   !is.na(lon2) &
@@ -235,8 +362,8 @@ dat <- data|>
 leaflet(dat) |>
   addTiles() |>
   addFlows(
-    lng0 = dat$lon1x, lat0 = dat$lat1x, # Startpunkte
-    lng1 = dat$lon2x, lat1 = dat$lat2x, # Endpunkte
+    lng0 = dat$lon1, lat0 = dat$lat1, # Startpunkte
+    lng1 = dat$lon2, lat1 = dat$lat2, # Endpunkte
     color = "blue",
     flow = 1,              # Bestimmt die Richtung (1 = Start zu Ende)
     minThickness = 2, 
@@ -244,6 +371,49 @@ leaflet(dat) |>
   )
 
 ```
+
+### Farbe nach Linie
+
+```{r}
+
+dat <- data|> 
+  filter(!is.na(lon1) & 
+  !is.na(lon2) &
+  `Entf. GebOrt - SterbeOrt` > 20)
+leaflet(dat) |>
+  addTiles() |>
+  addFlows(
+    lng0 = dat$lon1, lat0 = dat$lat1, # Startpunkte
+    lng1 = dat$lon2, lat1 = dat$lat2, # Endpunkte
+    color = col,
+    flow = 1,              # Bestimmt die Richtung (1 = Start zu Ende)
+    minThickness = 2, 
+    maxThickness = 2       # Konstante Dicke
+  )
+
+```
+
+### Farbe nach Generation
+
+```{r}
+dat <- data|> 
+  filter(!is.na(lon1) & 
+  !is.na(lon2) &
+  `Entf. GebOrt - SterbeOrt` > 20)
+leaflet(dat) |>
+  addTiles() |>
+  addFlows(
+    lng0 = dat$lon1, lat0 = dat$lat1, # Startpunkte
+    lng1 = dat$lon2, lat1 = dat$lat2, # Endpunkte
+    color = blues_15,
+    flow = 1,              # Bestimmt die Richtung (1 = Start zu Ende)
+    minThickness = 2, 
+    maxThickness = 2       # Konstante Dicke
+  )
+
+```
+
+
 
 # Pfeile V2
 
