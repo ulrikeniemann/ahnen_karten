@@ -210,3 +210,222 @@ leaflet(datGeb) |>
     opacity = 1,
     labFormat = function(type, cuts, p) as.character(01:14)
   )
+
+
+# ------------------------------------------------------------------------------
+
+
+library(leaflet)
+library(leaflet.extras)
+
+df <- data.frame(
+  lon_from = c(13.4050, 11.5820),
+  lat_from = c(52.5200, 48.1351),
+  lon_to   = c(9.9937,  8.6821),
+  lat_to   = c(53.5511, 50.1109)
+)
+
+leaflet() |>
+  addTiles() |>
+  addPolylines(
+    lng = as.matrix(df[, c("lon_from", "lon_to")]),
+    lat = as.matrix(df[, c("lat_from", "lat_to")]),
+    color = "blue",
+    weight = 3
+  ) |>
+  addArrowhead(
+    lng = df$lon_to,
+    lat = df$lat_to,
+    color = "blue",
+    fillOpacity = 1
+  )
+
+# ------------------------------------------------------------------------------
+
+# Beispiel-Daten
+df <- data.frame(
+  lon_from = runif(20, 6, 14),
+  lat_from = runif(20, 47, 54),
+  lon_to   = runif(20, 6, 14),
+  lat_to   = runif(20, 47, 54)
+)
+
+leaflet() |>
+  addTiles() |>
+
+  # Linien
+  addPolylines(
+    lng = as.matrix(df[, c("lon_from", "lon_to")]),
+    lat = as.matrix(df[, c("lat_from", "lat_to")]),
+    color = "#1f78b4",
+    weight = 1,
+    opacity = 0.8
+  ) |>
+
+  # Pfeilspitzen exakt am Ziel
+  addArrowhead(
+    lng = df$lon_to,
+    lat = df$lat_to,
+    color = "#1f78b4",
+    fillColor = "#1f78b4",
+    fillOpacity = 1,
+    weight = 2
+  )
+
+# ------------------------------------------------------------------------------
+
+arrow_triangle <- function(x0, y0, x1, y1, size = 0.15) {
+  dx <- x1 - x0
+  dy <- y1 - y0
+  len <- sqrt(dx^2 + dy^2)
+
+  if (len == 0) return(NULL)
+
+  ux <- dx / len
+  uy <- dy / len
+
+  # senkrechte Richtung
+  px <- -uy
+  py <- ux
+
+  data.frame(
+    lng = c(
+      x1,
+      x1 - size * (ux + px),
+      x1 - size * (ux - px),
+      x1                # Polygon schließen
+    ),
+    lat = c(
+      y1,
+      y1 - size * (uy + py),
+      y1 - size * (uy - py),
+      y1
+    )
+  )
+}
+
+df <- data.frame(
+  lon_from = runif(20, 6, 14),
+  lat_from = runif(20, 47, 54),
+  lon_to   = runif(20, 6, 14),
+  lat_to   = runif(20, 47, 54)
+)
+
+m <- leaflet() |>
+  addTiles() |>
+  addPolylines(
+    lng = as.matrix(df[, c("lon_from", "lon_to")]),
+    lat = as.matrix(df[, c("lat_from", "lat_to")]),
+    color = "#1f78b4",
+    weight = 1,
+    opacity = 0.8
+  )
+
+# Pfeilspitzen als Polygone
+for (i in seq_len(nrow(df))) {
+  tri <- arrow_triangle(
+    df$lon_from[i], df$lat_from[i],
+    df$lon_to[i],   df$lat_to[i],
+    size = 0.2
+  )
+
+  m <- m |>
+    addPolygons(
+      lng = tri$lng,
+      lat = tri$lat,
+      fillColor = "#1f78b4",
+      fillOpacity = 1,
+      color = "#1f78b4",
+      weight = 1
+    )
+}
+
+m
+
+# ------------------------------------------------------------------------------
+
+library(htmlwidgets)
+
+df <- data.frame(
+  lon_from = c(13.4050, 11.5820),
+  lat_from = c(52.5200, 48.1351),
+  lon_to   = c(9.9937,  8.6821),
+  lat_to   = c(53.5511, 50.1109)
+)
+
+m <- leaflet(df) |>
+  addTiles() |>
+  addPolylines(
+    lng = ~c(lon_from, lon_to),
+    lat = ~c(lat_from, lat_to),
+    color = "#1f78b4",
+    weight = 1
+  )
+
+js <- "
+function(el, x) {
+  var map = this;
+
+  x.data.forEach(function(d) {
+    var latlngs = [
+      [d.lat_from, d.lon_from],
+      [d.lat_to, d.lon_to]
+    ];
+
+    var polyline = L.polyline(latlngs, {
+      color: '#1f78b4',
+      weight: 4
+    }).addTo(map);
+
+    L.polylineDecorator(polyline, {
+      patterns: [
+        {
+          offset: '100%',
+          repeat: 0,
+          symbol: L.Symbol.arrowHead({
+            pixelSize: 50,
+            polygon: true,
+            pathOptions: {
+              fillOpacity: 1,
+              weight: 0,
+              color: '#1f78b4',
+              fillColor: '#1f78b4'
+            }
+          })
+        }
+      ]
+    }).addTo(map);
+  });
+}
+"
+
+m |> onRender(js)
+
+# ------------------------------------------------------------------------------
+
+#install.packages(c("ggplot2", "sf", "rnaturalearth", "rnaturalearthdata"))
+library(ggplot2)
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+
+df <- data.frame(
+  lon_from = runif(20, 6, 14),
+  lat_from = runif(20, 47, 54),
+  lon_to   = runif(20, 6, 14),
+  lat_to   = runif(20, 47, 54)
+)
+
+
+ggplot(df) +
+  geom_segment(
+    aes(
+      x = lon_from, y = lat_from,
+      xend = lon_to, yend = lat_to
+    ),
+    arrow = arrow(type = "closed", length = unit(4, "mm")),
+    linewidth = 1,
+    color = "blue"
+  ) +
+  coord_fixed()
+

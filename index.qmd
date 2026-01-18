@@ -87,6 +87,13 @@ datGebGroup <- data |>
   group_by(LINIE, lon1, lat1) |>
   summarise(count = n(), .groups = "drop") |> 
   mutate(size = (count / 2) + 2.5)
+
+# für die Pfeile brauchen wir beide Koordinaten
+datPfeile <- data|> 
+  filter(!is.na(lon1) & 
+  !is.na(lon2) &
+  `Entf. GebOrt - SterbeOrt` > 20)
+
 ```
 
 ```{r functions}
@@ -354,16 +361,11 @@ mit Versatz oder wie hier ohne??
 ### eine Farbe
 
 ```{r}
-
-dat <- data|> 
-  filter(!is.na(lon1) & 
-  !is.na(lon2) &
-  `Entf. GebOrt - SterbeOrt` > 20)
-leaflet(dat) |>
+leaflet(datPfeile) |>
   addTiles() |>
   addFlows(
-    lng0 = dat$lon1, lat0 = dat$lat1, # Startpunkte
-    lng1 = dat$lon2, lat1 = dat$lat2, # Endpunkte
+    lng0 = datPfeile$lon1, lat0 = datPfeile$lat1, # Startpunkte
+    lng1 = datPfeile$lon2, lat1 = datPfeile$lat2, # Endpunkte
     color = "blue",
     flow = 1,              # Bestimmt die Richtung (1 = Start zu Ende)
     minThickness = 2, 
@@ -375,16 +377,11 @@ leaflet(dat) |>
 ### Farbe nach Linie
 
 ```{r}
-
-dat <- data|> 
-  filter(!is.na(lon1) & 
-  !is.na(lon2) &
-  `Entf. GebOrt - SterbeOrt` > 20)
-leaflet(dat) |>
+leaflet(datPfeile) |>
   addTiles() |>
   addFlows(
-    lng0 = dat$lon1, lat0 = dat$lat1, # Startpunkte
-    lng1 = dat$lon2, lat1 = dat$lat2, # Endpunkte
+    lng0 = datPfeile$lon1, lat0 = datPfeile$lat1, # Startpunkte
+    lng1 = datPfeile$lon2, lat1 = datPfeile$lat2, # Endpunkte
     color = col,
     flow = 1,              # Bestimmt die Richtung (1 = Start zu Ende)
     minThickness = 2, 
@@ -396,15 +393,11 @@ leaflet(dat) |>
 ### Farbe nach Generation
 
 ```{r}
-dat <- data|> 
-  filter(!is.na(lon1) & 
-  !is.na(lon2) &
-  `Entf. GebOrt - SterbeOrt` > 20)
-leaflet(dat) |>
+leaflet(datPfeile) |>
   addTiles() |>
   addFlows(
-    lng0 = dat$lon1, lat0 = dat$lat1, # Startpunkte
-    lng1 = dat$lon2, lat1 = dat$lat2, # Endpunkte
+    lng0 = datPfeile$lon1, lat0 = datPfeile$lat1, # Startpunkte
+    lng1 = datPfeile$lon2, lat1 = datPfeile$lat2, # Endpunkte
     color = blues_15,
     flow = 1,              # Bestimmt die Richtung (1 = Start zu Ende)
     minThickness = 2, 
@@ -426,10 +419,10 @@ ggplot() +
   geom_sf(data = germany, fill = "grey95") + 
   labs(title = "Geburtsort ---> Sterbeort") +
   geom_curve(
-    data = dat,
+    data = datPfeile,
     aes(
-      x = lon1x, y = lat1x,
-      xend = lon2x, yend = lat2x,
+      x = lon1, y = lat1,
+      xend = lon2, yend = lat2,
       color = LINIE
     ),
     arrow = arrow(length = unit(0.2, "cm"), type = "closed"),
@@ -452,3 +445,88 @@ ggplot() +
   )
 ```
 
+# Pfeile V3
+
+Mit ggplot, eingefärbt nach GENERATION
+
+```{r}
+germany <- ne_countries(scale = "medium", country = "Germany", returnclass = "sf")
+
+ggplot() +
+  geom_sf(data = germany, fill = "grey95") + 
+  labs(title = "Geburtsort ---> Sterbeort") +
+  geom_curve(
+    data = datPfeile,
+    aes(
+      x = lon1, y = lat1,
+      xend = lon2, yend = lat2,
+      color = as.factor(GENERATION)
+    ),
+    arrow = arrow(length = unit(0.2, "cm"), type = "closed"),
+    #color = "#469bf2",
+    curvature = 0.2,
+    size = 0.7
+  ) +
+  # Legende für die Farben der Pfeile
+  scale_color_manual(
+    #NAME = "GENERATION",
+    values = blues_15
+  ) +
+  # Legende Titel
+  labs(color = "Generation") +
+  theme_minimal() +
+  # alle gitternetzLINIEn und Achsen entfernen
+  theme(
+    panel.grid = element_blank(),
+    axis.title = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank()
+  )
+
+```
+
+
+```{r}
+ggplot() +
+  geom_sf(
+    data = germany,
+    fill = "grey95",
+    color = "grey60",
+    linewidth = 0.3
+  ) +
+  geom_segment(
+    data = datPfeile,
+    aes(
+      x = lon1, y = lat1,
+      xend = lon2, yend = lat2,
+      color = as.factor(GENERATION)
+    ),
+    arrow = arrow(
+      type = "closed",           # <-- gefüllt
+      length = unit(2.5, "mm")   # Pfeilgröße
+    ),
+    linewidth = 0.6#,
+    #color = "#1f78b4"
+    #color = as.factor(datPfeile$GENERATION)
+  ) +
+  coord_sf(
+    xlim = c(5.5, 15.5),
+    ylim = c(47, 55),
+    expand = FALSE
+  ) +
+    # Legende für die Farben der Pfeile
+  scale_color_manual(
+    #NAME = "GENERATION",
+    values = blues_15
+  ) +  
+  # Legende Titel
+  labs(color = "Generation") +  
+  theme_minimal() +
+  # alle gitternetzLINIEn und Achsen entfernen
+  theme(
+    panel.grid = element_blank(),
+    axis.title = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank()
+  )
+```
