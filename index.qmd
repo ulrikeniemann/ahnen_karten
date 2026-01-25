@@ -631,6 +631,13 @@ lev <- unique(datV1_kinder$Linie)
 lev <- lev[!is.na(lev)]
 cols <- colorFactor(palette = col, unique(na.omit(datV1_kinder$Linie)))  
 
+# Popup
+#popup_vec <- str_c(
+datV1_kinder$popup_text <- str_c(
+  "Elter: ", datV1_kinder$Vorname, " ", datV1_kinder$Name,
+  " - Kind: ", datV1_kinder$Vorname_Kind, " ", datV1_kinder$Name_Kind
+)
+
 # Karte
 leaflet(datV1_kinder) |>
   addTiles() |>
@@ -639,7 +646,7 @@ leaflet(datV1_kinder) |>
     lng1 = datV1_kinder$lon2, lat1 = datV1_kinder$lat2, # Endpunkte
     color = cols(datV1_kinder$Linie),
     flow = 1,              # Bestimmt die Richtung (1 = Start zu Ende)
-    minThickness = 2, 
-    maxThickness = 2       # Konstante Dicke
+    minThickness = 1, 
+    maxThickness = 1       # Konstante Dicke
   )
 ```
