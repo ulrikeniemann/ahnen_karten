@@ -650,3 +650,61 @@ leaflet(datV1_kinder) |>
     maxThickness = 1       # Konstante Dicke
   )
 ```
+
+noch eine Version ohne Pfeile, dafür mit End-Bubble (Kind Geburt)
+
+Farben der Linie des Elternteils!
+
+
+```{r}
+# datV1_kinder$farbe <- cols(datV1_kinder$Linie)
+
+# leaflet(datV1_kinder) |>
+#   addTiles() |>
+#   addPolylines(
+#     lng = ~c(lon1, lon2),
+#     lat = ~c(lat1, lat2),
+#     color = "blue",
+#     weight = 1
+#   ) #|> 
+#   # addCircleMarkers(
+#   #   ~lon2,
+#   #   ~lat2,
+#   #   radius = 3,
+#   #   fillColor = ~ cols(Linie),
+#   #   color = c("black", "black"),
+#   #   fillOpacity = 0.8,
+#   #   weight = 1,
+#   #   popup = ~ str_c("Elternteil: ", Vorname, " ", Name, " - Kind: ", Vorname_Kind, " ", Name_Kind)
+#   # )
+```
+
+```{r}
+datV1_kinder$farbe <- cols(datV1_kinder$Linie)
+
+map <- leaflet() |>
+  addTiles()
+
+for(i in seq_len(nrow(datV1_kinder))) {
+  map <- addPolylines(
+    map,
+    lng = c(datV1_kinder$lon1[i], datV1_kinder$lon2[i]),
+    lat = c(datV1_kinder$lat1[i], datV1_kinder$lat2[i]),
+    color = datV1_kinder$farbe[i],
+    weight = 2
+  )
+}
+#map
+map |> 
+    addCircleMarkers(
+   data = datV1_kinder,
+    ~lon2,
+    ~lat2,
+    radius = 3,
+    fillColor = ~ cols(Linie),
+    color = c("black", "black"),
+    fillOpacity = 0.8,
+    weight = 1,
+    popup = ~ str_c("Elternteil: ", Vorname, " ", Name, " - Kind: ", Vorname_Kind, " ", Name_Kind)
+  )
+```
