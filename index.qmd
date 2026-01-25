@@ -94,6 +94,28 @@ datPfeile <- data|>
   !is.na(lon2) &
   `Entf. GebOrt - SterbeOrt` > 20)
 
+
+# Farben für Darstellung nach Linie
+col <- c("red", "#469bf2")
+lev <- unique(data$LINIE)
+lev <- lev[!is.na(lev)]
+cols <- colorFactor(palette = col, unique(na.omit(data$LINIE)))
+
+# Farben für die Darstellung nach Generation
+# Ensure GENERATION is numeric and drop NAs
+datGeb <- datGeb |> mutate(GENERATION = as.numeric(GENERATION))
+generationen <- sort(unique(na.omit(datGeb$GENERATION)))
+
+blues_15 <- rev(colorRampPalette(brewer.pal(9, "Blues"))(15))
+
+blues_pal <- colorBin(
+  palette = blues_15,
+  domain = generationen,
+  bins = 15,
+  pretty = FALSE
+)
+
+
 ```
 
 ```{r functions}
@@ -145,6 +167,50 @@ addLegendCustom <- function(map, colors, labels, sizes = 10, borders = "black", 
 }
 
 ```
+
+<!-- ----------------------------------------------------------------------- -->
+
+# Auswahl Karten für Druck
+
+Ausgewählt wurde: Geburtsort nach Linie - nicht gruppiert, mit Versatz, optionale Legende, Hintergrund TopPlusOpen.Color.
+
+```{r }
+size <- 12
+legend_html <- paste0("
+<div style='background: white; padding: 8px; border-radius: 6px; box-shadow: 0 1px 5px rgba(0,0,0,0.65);'>
+  <span style='display: inline-block; width:", size, "px; height:", size, "px; border-radius:50%; background:#469bf2; border:1px solid black; opacity:0.8; vertical-align:middle;'></span>
+  Vaterlinie<br>
+  <span style='display: inline-block; width:", size, "px; height:", size, "px; border-radius:50%; background:red; border:1px solid black; opacity:0.8; vertical-align:middle;'></span>
+  Mutterlinie
+</div>
+")
+
+leaflet(datGeb) |>
+  #add_custom_layers() |> 
+  addTiles() |>
+  addTiles(
+    urlTemplate = "https://sgx.geodatenzentrum.de/wmts_topplus_open/tile/1.0.0/web/default/WEBMERCATOR/{z}/{y}/{x}.png",
+    attribution = '© dl-de/by-2-0',
+    group = "TopPlusOpen.Color"
+  ) |> 
+  addCircleMarkers(
+    ~lon1x,
+    ~lat1x,
+    radius = 4,
+    fillColor = ~ cols(LINIE),
+    color = c("black", "black"),
+    fillOpacity = 0.8,
+    weight = 1,
+    popup = ~ str_c(VORNAME, " ", NAME)
+  ) |>
+  # addLegendCustom(
+  #   colors = col,
+  #   labels = c("Vaterlinie", "Mutterlinie")
+  # )
+  addControl(html = legend_html, position = "bottomright")
+```
+
+
 
 <!-- ----------------------------------------------------------------------- -->
 
@@ -208,10 +274,6 @@ hier mit schwarzem Rand (richtig?)
 ## gruppiert - ohne Versatz
 
 ```{r }
-col <- c("red", "#469bf2")
-lev <- unique(data$LINIE)
-lev <- lev[!is.na(lev)]
-cols <- colorFactor(palette = col, unique(na.omit(data$LINIE)))
 
 leaflet(datGebGroup) |>
   add_custom_layers() |> 
@@ -297,32 +359,21 @@ leaflet(datGeb) |>
 
 ```{r }
 
-# Ensure GENERATION is numeric and drop NAs
-datGeb <- datGeb |> mutate(GENERATION = as.numeric(GENERATION))
-generationen <- sort(unique(na.omit(datGeb$GENERATION)))
+# # Ensure GENERATION is numeric and drop NAs
+# datGeb <- datGeb |> mutate(GENERATION = as.numeric(GENERATION))
+# generationen <- sort(unique(na.omit(datGeb$GENERATION)))
 
-blues_15 <- rev(colorRampPalette(brewer.pal(9, "Blues"))(15))
+# blues_15 <- rev(colorRampPalette(brewer.pal(9, "Blues"))(15))
 
-blues_pal <- colorBin(
-  palette = blues_15,
-  domain = generationen,
-  bins = 15,
-  pretty = FALSE
-)
+# blues_pal <- colorBin(
+#   palette = blues_15,
+#   domain = generationen,
+#   bins = 15,
+#   pretty = FALSE
+# )
 
 
-# Ensure GENERATION is numeric and drop NAs
-datGeb <- datGeb |> mutate(GENERATION = as.numeric(GENERATION))
-generationen <- sort(unique(na.omit(datGeb$GENERATION)))
 
-blues_15 <- rev(colorRampPalette(brewer.pal(9, "Blues"))(15))
-
-blues_pal <- colorBin(
-  palette = blues_15,
-  domain = generationen,
-  bins = 15,
-  pretty = FALSE
-)
 
 leaflet(datGeb) |>
   add_custom_layers() |> 
@@ -528,5 +579,67 @@ ggplot() +
     axis.title = element_blank(),
     axis.text = element_blank(),
     axis.ticks = element_blank()
+  )
+```
+
+# Test: Pfeile Eltern - Kind.
+
+Hier gefiltert auf mindestens 10 Kilometer Abstand, sonst bleibt zu wenig übrig?
+Können wir noch anpassen.
+
+
+```{r}
+# Daten V1 laden (V2 fehlt die Kind-Spalte)
+datV1 <- read_excel("./data/AHNEN_2026.xlsx", sheet = "Karten")
+
+datV1 <- datV1 |>
+  filter(!is.na(`LAT GebOrt`)) |> # nur Personen mit Geburtsort
+  mutate(Kekule = as.integer(Kekule)) |> # Kekule als Integer
+  select(Kekule, Linie, Vorname, Name, `LAT GebOrt`, `LON GebTag`, KIND)
+
+# Geburtsorte Kinder anspielen
+tempKinder <- datV1 |>
+  filter(! (Kekule == 1 & Vorname == "Juliane")) |> # jede Kekule nur einmal
+  select(KIND = Kekule, Vorname_Kind = Vorname, Name_Kind = Name, 
+    lat_kind = `LAT GebOrt`, lon_kind = `LON GebTag`)
+
+# Kinder joinen
+datV1_kinder <- datV1 |>
+  left_join(tempKinder, by = "KIND")
+
+# berechne die Distanz zwischen Geburtsort Eltern - Kind in km
+datV1_kinder <- datV1_kinder |>
+  mutate(
+    `Entfernung Geburt Eltern-Kind` = geosphere::distHaversine(
+      # matrix(c(`LAT GebOrt`, lat_kind), ncol = 2),
+      # matrix(c(`LON GebTag`, lon_kind), ncol = 2)
+      cbind(`LON GebTag`, `LAT GebOrt`),
+      cbind(lon_kind, lat_kind)
+    ) / 1000
+  )
+
+# nicht die kurzen Entfernungen darstellen
+datV1_kinder <- datV1_kinder |>
+  filter(`Entfernung Geburt Eltern-Kind` > 10) |> 
+  rename(
+    lat1 = `LAT GebOrt`, lon1 = `LON GebTag`,
+    lat2 = lat_kind, lon2 = lon_kind
+  )
+
+col <- c("red", "#469bf2")
+lev <- unique(datV1_kinder$Linie)
+lev <- lev[!is.na(lev)]
+cols <- colorFactor(palette = col, unique(na.omit(datV1_kinder$Linie)))  
+
+# Karte
+leaflet(datV1_kinder) |>
+  addTiles() |>
+  addFlows(
+    lng0 = datV1_kinder$lon1, lat0 = datV1_kinder$lat1, # Startpunkte
+    lng1 = datV1_kinder$lon2, lat1 = datV1_kinder$lat2, # Endpunkte
+    color = cols(datV1_kinder$Linie),
+    flow = 1,              # Bestimmt die Richtung (1 = Start zu Ende)
+    minThickness = 2, 
+    maxThickness = 2       # Konstante Dicke
   )
 ```
