@@ -19,107 +19,95 @@ execute:
 ```{r setup}
 # ------------------------------------------------------------------------------
 # librarys laden
-packages <- c("tidyverse", "readxl", "leaflet", 
-              "leaflet.minicharts", # Pfeile V1
-              "sf", "rnaturalearth" # Pfeile V2
-              , "geosphere",
-              "RColorBrewer"
-              )
-packages <- rev(packages)
-for (package in packages) {
-    if (!require(package, character.only = TRUE)) {
-        install.packages(package, character.only = TRUE)
-    }
-    library(package, character.only = TRUE)
-}
-rm(packages, package)
+library(tidyverse)
+library(readxl)
+library(geosphere)
+library(leaflet)
+library(leaflet.minicharts)
+library(RColorBrewer)
 ```
 
 ```{r data}
 # ------------------------------------------------------------------------------
 # Daten laden
+data_orig <- read_excel("./data/Niemann-26.02.2026_select.xlsx")
+```
 
-# V2 - inkl. Generation
-data <- read_excel("./data/Karten2026.xlsx")
+
+```{r prepare}
+# ------------------------------------------------------------------------------
+# Daten aufbereiten
+data <- data_orig
+
+# filter lat und lon not na 
+data <- data |> 
+  filter( !is.na(LAT_GEBURT) & !is.na(LON_GEBURT) )
+
 
 # parse numbers
 data <- data |> 
   mutate(
-    lat1 = `LAT GEB` |> parse_number(),
-    lon1 = `LON GEB` |> parse_number(),
-    lat2 = `LAT TOD` |> parse_number(),
-    lon2 = `LON TOD` |> parse_number()
+    LAT_GEBURT = LAT_GEBURT |> parse_number(),
+    LON_GEBURT = LON_GEBURT |> parse_number(),
+    LAT_TOD = LAT_TOD |> parse_number(),
+    LON_TOD = LON_TOD |> parse_number()
     )
+
+# zweiten temporären Datensatz für Eltern
+# dubliziere Datensatz 1 mit den Spalten lat und lon
+data_eltern <- data |> 
+  select(ID, VORNAME, NACHNAME, LAT_GEBURT, LON_GEBURT) |> 
+  rename(
+    ID_ELTERN = ID,
+    LAT_GEB_ELTERN = LAT_GEBURT,
+    LON_GEB_ELTERN = LON_GEBURT,
+    VORNAME_ELTERN = VORNAME,
+    NACHNAME_ELTERN = NACHNAME
+  ) |> 
+  filter(!is.na(LAT_GEB_ELTERN) & !is.na(LON_GEB_ELTERN))
+
+# Daten zusammenführen
+data <- data |> 
+  # Vaterdaten anfügen
+  left_join(data_eltern, by = c("VATER" = "ID_ELTERN")) |> 
+  rename(
+    LAT_GEB_VATER = LAT_GEB_ELTERN,
+    LON_GEB_VATER = LON_GEB_ELTERN,
+    VORNAME_VATER = VORNAME_ELTERN,
+    NACHNAME_VATER = NACHNAME_ELTERN
+  ) |> 
+  # Mutterdaten anfügen
+  left_join(data_eltern, by = c("MUTTER" = "ID_ELTERN")) |> 
+  rename(
+    LAT_GEB_MUTTER = LAT_GEB_ELTERN,
+    LON_GEB_MUTTER = LON_GEB_ELTERN,
+    VORNAME_MUTTER = VORNAME_ELTERN,
+    NACHNAME_MUTTER = NACHNAME_ELTERN
+  )
+
+# temporären Datensatz löschen
+rm(data_eltern)
 
 # berechne die Distanz zwischen Geburts- und Sterbeort in km
 data <- data |>
   mutate(
-    `Entf. GebOrt - SterbeOrt` = geosphere::distHaversine(
-      matrix(c(lon1, lat1), ncol = 2),
-      matrix(c(lon2, lat2), ncol = 2)
+    `KM_KIND_VATER` = geosphere::distHaversine(
+      cbind(LON_GEBURT, LAT_GEBURT),
+      cbind(LON_GEB_VATER, LAT_GEB_VATER)
+    ) / 1000,
+    `KM_KIND_MUTTER` = geosphere::distHaversine(
+      cbind(LON_GEBURT, LAT_GEBURT),
+      cbind(LON_GEB_MUTTER, LAT_GEB_MUTTER)
     ) / 1000
   )
 
-# leichtes Rauschen
-data <- data |>
-  mutate(
-    lat1x = jitter(lat1, factor = 1),
-    lon1x = jitter(lon1, factor = 1),
-    lat2x = jitter(lat2, factor = 1),
-    lon2x = jitter(lon2, factor = 1)
-  )
-
-# ohne Rauschen - auf den x-Variablen bleiben damit das nicht ersetzt werden muss
-# data <- data |>
-#   mutate(
-#     lat1x = lat1,
-#     lon1x = lon1,
-#     lat2x = lat2,
-#     lon2x = lon2
-#   )
-
-# nur Geburtsorte
-datGeb <- data |> filter(!is.na(lon1))
-
-# Geburtsorte zusammenfassen für größenveränderte Punkte
-datGebGroup <- data |>
-  filter(!is.na(lon1)) |>
-  group_by(LINIE, lon1, lat1) |>
-  summarise(count = n(), .groups = "drop") |> 
-  mutate(size = (count / 2) + 2.5)
-
-# für die Pfeile brauchen wir beide Koordinaten
-datPfeile <- data|> 
-  filter(!is.na(lon1) & 
-  !is.na(lon2) &
-  `Entf. GebOrt - SterbeOrt` > 20)
-
-
-# Farben für Darstellung nach Linie
-col <- c("red", "#469bf2")
-lev <- unique(data$LINIE)
-lev <- lev[!is.na(lev)]
-cols <- colorFactor(palette = col, unique(na.omit(data$LINIE)))
-
-# Farben für die Darstellung nach Generation
-# Ensure GENERATION is numeric and drop NAs
-datGeb <- datGeb |> mutate(GENERATION = as.numeric(GENERATION))
-generationen <- sort(unique(na.omit(datGeb$GENERATION)))
-
-blues_15 <- rev(colorRampPalette(brewer.pal(9, "Blues"))(15))
-
-blues_pal <- colorBin(
-  palette = blues_15,
-  domain = generationen,
-  bins = 15,
-  pretty = FALSE
-)
-
-
 ```
 
-```{r functions}
+
+```{r helper}
 # ------------------------------------------------------------------------------
+# Helferlein
+
 # Layer als Variable speichern
 add_custom_layers <- function(map) {
   map |> 
@@ -166,15 +154,7 @@ addLegendCustom <- function(map, colors, labels, sizes = 10, borders = "black", 
   )
 }
 
-```
-
-<!-- ----------------------------------------------------------------------- -->
-
-# Auswahl Karten für Druck
-
-Ausgewählt wurde: Geburtsort nach Linie - nicht gruppiert, mit Versatz, optionale Legende, Hintergrund TopPlusOpen.Color.
-
-```{r }
+# eigene Legende mit Kreisen
 size <- 12
 legend_html <- paste0("
 <div style='background: white; padding: 8px; border-radius: 6px; box-shadow: 0 1px 5px rgba(0,0,0,0.65);'>
@@ -185,526 +165,310 @@ legend_html <- paste0("
 </div>
 ")
 
-leaflet(datGeb) |>
-  #add_custom_layers() |> 
-  addTiles() |>
-  addTiles(
-    urlTemplate = "https://sgx.geodatenzentrum.de/wmts_topplus_open/tile/1.0.0/web/default/WEBMERCATOR/{z}/{y}/{x}.png",
-    attribution = '© dl-de/by-2-0',
-    group = "TopPlusOpen.Color"
-  ) |> 
-  addCircleMarkers(
-    ~lon1x,
-    ~lat1x,
-    radius = 4,
-    fillColor = ~ cols(LINIE),
-    color = c("black", "black"),
-    fillOpacity = 0.8,
-    weight = 1,
-    popup = ~ str_c(VORNAME, " ", NAME)
-  ) |>
-  # addLegendCustom(
-  #   colors = col,
-  #   labels = c("Vaterlinie", "Mutterlinie")
-  # )
-  addControl(html = legend_html, position = "bottomright")
-```
-
-
-
-<!-- ----------------------------------------------------------------------- -->
-
-# Geburtsorte 
-
-
-Varianten verschiedener Hintergründe auswählbar (siehe Layer Symbol oben)
-
-siehe auch hier http://leaflet-extras.github.io/leaflet-providers/preview/
-
-hier ist auch mal diese Lizenz-Zeile unten ausgeblendet (für Druck besser?)
-
-### nicht gruppiert - ohne Versatz
-
-Pop-Up mit Vorname und Name 
-
-```{r }
-leaflet(options = leafletOptions(attributionControl = FALSE), datGeb) |>
-  add_custom_layers() |> 
-  addCircleMarkers(~lon1, ~lat1, radius = 4,
-                  fillColor = "green", fillOpacity = 0.7,
-                  weight = 1, popup = ~str_c(VORNAME, " ", NAME))
-```
-
-### nicht gruppiert - mit Versatz
-
-Pop-Up mit Vorname und Name 
-
-den Versatz können wir auf Wunsch auch deutlich stärker machen
-
-```{r }
-leaflet(options = leafletOptions(attributionControl = FALSE), datGeb) |>
-  add_custom_layers() |> 
-    addCircleMarkers(~lon1x, ~lat1x, radius = 4,
-                   fillColor = "green", fillOpacity = 0.7,
-                   weight = 1, popup = ~str_c(VORNAME, " ", NAME))
-```
-
-### gruppiert - ohne Versatz
-
-hier: Daten gruppiert nach Geburtsorten mit Größe nach Anzahl der Geburten an diesem Ort
-
-Pop-Up mit Anzuhl der Geburten an diesem Ort
-
-```{r }
-leaflet(options = leafletOptions(attributionControl = FALSE), datGebGroup) |>
-  add_custom_layers() |> 
-  addCircleMarkers(~lon1, ~lat1, radius = ~ size,
-                   fillColor = "green", fillOpacity = 0.7,
-                   weight = 1, popup = ~ as.character(count))
-```    
-
-\
-
-<!-- ----------------------------------------------------------------------- -->
-
-# Geburtsorte nach LINIE
-
-hier mit schwarzem Rand (richtig?)
-
-## gruppiert - ohne Versatz
-
-```{r }
-
-leaflet(datGebGroup) |>
-  add_custom_layers() |> 
-  addCircleMarkers(
-    ~lon1,
-    ~lat1,
-    radius = ~ size,
-    fillColor = ~ cols(LINIE),
-    color = c("black", "black"),
-    fillOpacity = 0.8,
-    weight = 1,
-    popup = ~ as.character(count)
-  ) |>
-  addLegend(
-    'bottomright',
-    pal = cols,
-    values = lev,
-    #title = 'LINIE',
-    opacity = 1
-  )
-```
-
-## NICHT gruppiert - ohne Versatz
-
-```{r }
-leaflet(datGeb) |>
-  add_custom_layers() |> 
-  addCircleMarkers(
-    ~lon1,
-    ~lat1,
-    radius = 4,
-    fillColor = ~ cols(LINIE),
-    color = c("black", "black"),
-    fillOpacity = 0.8,
-    weight = 1,
-    popup = ~ str_c(VORNAME, " ", NAME)
-  ) |>
-  addLegend(
-    'bottomright',
-    pal = cols,
-    values = lev,
-    #title = 'LINIE',
-    opacity = 1
-  )
-```
-
-## NICHT gruppiert - mit Versatz, optionale Legende
-
-hier mal eine andere Legende mit Kreisen (den linken Rand kriege ich so auf die Schnelle nicht weg)
-
-```{r }
-size <- 12
-legend_html <- paste0("
-<div style='background: white; padding: 8px; border-radius: 6px; box-shadow: 0 1px 5px rgba(0,0,0,0.65);'>
-  <span style='display: inline-block; width:", size, "px; height:", size, "px; border-radius:50%; background:#469bf2; border:1px solid black; opacity:0.8; vertical-align:middle;'></span>
-  Vaterlinie<br>
-  <span style='display: inline-block; width:", size, "px; height:", size, "px; border-radius:50%; background:red; border:1px solid black; opacity:0.8; vertical-align:middle;'></span>
-  Mutterlinie
-</div>
-")
-
-leaflet(datGeb) |>
-  add_custom_layers() |> 
-  addCircleMarkers(
-    ~lon1x,
-    ~lat1x,
-    radius = 4,
-    fillColor = ~ cols(LINIE),
-    color = c("black", "black"),
-    fillOpacity = 0.8,
-    weight = 1,
-    popup = ~ str_c(VORNAME, " ", NAME)
-  ) |>
-  # addLegendCustom(
-  #   colors = col,
-  #   labels = c("Vaterlinie", "Mutterlinie")
-  # )
-  addControl(html = legend_html, position = "bottomright")
-```
-
-<!-- ----------------------------------------------------------------------- -->
-# Geburtsorte nach Generation
-
-```{r }
-
-# # Ensure GENERATION is numeric and drop NAs
-# datGeb <- datGeb |> mutate(GENERATION = as.numeric(GENERATION))
-# generationen <- sort(unique(na.omit(datGeb$GENERATION)))
-
-# blues_15 <- rev(colorRampPalette(brewer.pal(9, "Blues"))(15))
-
-# blues_pal <- colorBin(
-#   palette = blues_15,
-#   domain = generationen,
-#   bins = 15,
-#   pretty = FALSE
-# )
-
-
-
-
-leaflet(datGeb) |>
-  add_custom_layers() |> 
-  addCircleMarkers(
-    ~lon1,
-    ~lat1,
-    radius = 4,
-    fillColor = ~ blues_pal(GENERATION),
-    color = "black",
-    fillOpacity = 0.8,
-    weight = 1,
-    popup = ~ str_c(VORNAME, " ", NAME)
-  ) |>
-  addLegend(
-    position = "bottomright",
-    pal = blues_pal,
-    values = generationen,
-    title = "Generation",
-    opacity = 1,
-    labFormat = function(type, cuts, p) as.character(0:14)
-  )
-```
-
-<!-- ----------------------------------------------------------------------- -->
-
-# Pfeile V1
-
-Erster Versuch mit leaflet.minicharts -> nicht optimal
-
-es wäre hier nicht möglich die Pfeilspitzen ans Ende der Linie zu setzen..
-
-(Entfernung Geburts-/Sterbeort > 20 km)
-
-mit Versatz oder wie hier ohne??
-
-### eine Farbe
-
-```{r}
-leaflet(datPfeile) |>
-  addTiles() |>
-  addFlows(
-    lng0 = datPfeile$lon1, lat0 = datPfeile$lat1, # Startpunkte
-    lng1 = datPfeile$lon2, lat1 = datPfeile$lat2, # Endpunkte
-    color = "blue",
-    flow = 1,              # Bestimmt die Richtung (1 = Start zu Ende)
-    minThickness = 2, 
-    maxThickness = 2       # Konstante Dicke
-  )
-
-```
-
-### Farbe nach Linie
-
-```{r}
-leaflet(datPfeile) |>
-  addTiles() |>
-  addFlows(
-    lng0 = datPfeile$lon1, lat0 = datPfeile$lat1, # Startpunkte
-    lng1 = datPfeile$lon2, lat1 = datPfeile$lat2, # Endpunkte
-    color = col,
-    flow = 1,              # Bestimmt die Richtung (1 = Start zu Ende)
-    minThickness = 2, 
-    maxThickness = 2       # Konstante Dicke
-  )
-
-```
-
-### Farbe nach Generation
-
-```{r}
-leaflet(datPfeile) |>
-  addTiles() |>
-  addFlows(
-    lng0 = datPfeile$lon1, lat0 = datPfeile$lat1, # Startpunkte
-    lng1 = datPfeile$lon2, lat1 = datPfeile$lat2, # Endpunkte
-    color = blues_15,
-    flow = 1,              # Bestimmt die Richtung (1 = Start zu Ende)
-    minThickness = 2, 
-    maxThickness = 2       # Konstante Dicke
-  )
-
-```
-
-
-
-# Pfeile V2
-
-Mit ggplot, eingefärbt nach LINIE
-
-```{r}
-germany <- ne_countries(scale = "medium", country = "Germany", returnclass = "sf")
-
-ggplot() +
-  geom_sf(data = germany, fill = "grey95") + 
-  labs(title = "Geburtsort ---> Sterbeort") +
-  geom_curve(
-    data = datPfeile,
-    aes(
-      x = lon1, y = lat1,
-      xend = lon2, yend = lat2,
-      color = LINIE
-    ),
-    arrow = arrow(length = unit(0.2, "cm"), type = "closed"),
-    #color = "#469bf2",
-    curvature = 0.2,
-    size = 0.7
-  ) +
-  # Legende für die Farben der Pfeile
-  scale_color_manual(
-    #NAME = "LINIE",
-    values = c("Vaterlinie" = "#469bf2", "Mutterlinie" = "red")
-  ) +
-  theme_minimal() +
-  # alle gitternetzLINIEn und Achsen entfernen
-  theme(
-    panel.grid = element_blank(),
-    axis.title = element_blank(),
-    axis.text = element_blank(),
-    axis.ticks = element_blank()
-  )
-```
-
-# Pfeile V3
-
-Mit ggplot, eingefärbt nach GENERATION
-
-```{r}
-germany <- ne_countries(scale = "medium", country = "Germany", returnclass = "sf")
-
-ggplot() +
-  geom_sf(data = germany, fill = "grey95") + 
-  labs(title = "Geburtsort ---> Sterbeort") +
-  geom_curve(
-    data = datPfeile,
-    aes(
-      x = lon1, y = lat1,
-      xend = lon2, yend = lat2,
-      color = as.factor(GENERATION)
-    ),
-    arrow = arrow(length = unit(0.2, "cm"), type = "closed"),
-    #color = "#469bf2",
-    curvature = 0.2,
-    size = 0.7
-  ) +
-  # Legende für die Farben der Pfeile
-  scale_color_manual(
-    #NAME = "GENERATION",
-    values = blues_15
-  ) +
-  # Legende Titel
-  labs(color = "Generation") +
-  theme_minimal() +
-  # alle gitternetzLINIEn und Achsen entfernen
-  theme(
-    panel.grid = element_blank(),
-    axis.title = element_blank(),
-    axis.text = element_blank(),
-    axis.ticks = element_blank()
-  )
-
-```
-
-
-```{r}
-ggplot() +
-  geom_sf(
-    data = germany,
-    fill = "grey95",
-    color = "grey60",
-    linewidth = 0.3
-  ) +
-  geom_segment(
-    data = datPfeile,
-    aes(
-      x = lon1, y = lat1,
-      xend = lon2, yend = lat2,
-      color = as.factor(GENERATION)
-    ),
-    arrow = arrow(
-      type = "closed",           # <-- gefüllt
-      length = unit(2.5, "mm")   # Pfeilgröße
-    ),
-    linewidth = 0.6#,
-    #color = "#1f78b4"
-    #color = as.factor(datPfeile$GENERATION)
-  ) +
-  coord_sf(
-    xlim = c(5.5, 15.5),
-    ylim = c(47, 55),
-    expand = FALSE
-  ) +
-    # Legende für die Farben der Pfeile
-  scale_color_manual(
-    #NAME = "GENERATION",
-    values = blues_15
-  ) +  
-  # Legende Titel
-  labs(color = "Generation") +  
-  theme_minimal() +
-  # alle gitternetzLINIEn und Achsen entfernen
-  theme(
-    panel.grid = element_blank(),
-    axis.title = element_blank(),
-    axis.text = element_blank(),
-    axis.ticks = element_blank()
-  )
-```
-
-# Test: Pfeile Eltern - Kind.
-
-Hier gefiltert auf mindestens 10 Kilometer Abstand, sonst bleibt zu wenig übrig?
-Können wir noch anpassen.
-
-
-```{r}
-# Daten V1 laden (V2 fehlt die Kind-Spalte)
-datV1 <- read_excel("./data/AHNEN_2026.xlsx", sheet = "Karten")
-
-datV1 <- datV1 |>
-  filter(!is.na(`LAT GebOrt`)) |> # nur Personen mit Geburtsort
-  mutate(Kekule = as.integer(Kekule)) |> # Kekule als Integer
-  select(Kekule, Linie, Vorname, Name, `LAT GebOrt`, `LON GebTag`, KIND)
-
-# Geburtsorte Kinder anspielen
-tempKinder <- datV1 |>
-  filter(! (Kekule == 1 & Vorname == "Juliane")) |> # jede Kekule nur einmal
-  select(KIND = Kekule, Vorname_Kind = Vorname, Name_Kind = Name, 
-    lat_kind = `LAT GebOrt`, lon_kind = `LON GebTag`)
-
-# Kinder joinen
-datV1_kinder <- datV1 |>
-  left_join(tempKinder, by = "KIND")
-
-# berechne die Distanz zwischen Geburtsort Eltern - Kind in km
-datV1_kinder <- datV1_kinder |>
-  mutate(
-    `Entfernung Geburt Eltern-Kind` = geosphere::distHaversine(
-      # matrix(c(`LAT GebOrt`, lat_kind), ncol = 2),
-      # matrix(c(`LON GebTag`, lon_kind), ncol = 2)
-      cbind(`LON GebTag`, `LAT GebOrt`),
-      cbind(lon_kind, lat_kind)
-    ) / 1000
-  )
-
-# nicht die kurzen Entfernungen darstellen
-datV1_kinder <- datV1_kinder |>
-  filter(`Entfernung Geburt Eltern-Kind` > 10) |> 
-  rename(
-    lat1 = `LAT GebOrt`, lon1 = `LON GebTag`,
-    lat2 = lat_kind, lon2 = lon_kind
-  )
-
+# Farben für Darstellung nach Linie
 col <- c("red", "#469bf2")
-lev <- unique(datV1_kinder$Linie)
+lev <- unique(data$LINIE)
 lev <- lev[!is.na(lev)]
-cols <- colorFactor(palette = col, unique(na.omit(datV1_kinder$Linie)))  
+cols <- colorFactor(palette = col, unique(na.omit(data$LINIE)))
 
-# Popup
-#popup_vec <- str_c(
-datV1_kinder$popup_text <- str_c(
-  "Elter: ", datV1_kinder$Vorname, " ", datV1_kinder$Name,
-  " - Kind: ", datV1_kinder$Vorname_Kind, " ", datV1_kinder$Name_Kind
-)
+```
 
-# Karte
-leaflet(datV1_kinder) |>
-  addTiles() |>
-  addFlows(
-    lng0 = datV1_kinder$lon1, lat0 = datV1_kinder$lat1, # Startpunkte
-    lng1 = datV1_kinder$lon2, lat1 = datV1_kinder$lat2, # Endpunkte
-    color = cols(datV1_kinder$Linie),
-    flow = 1,              # Bestimmt die Richtung (1 = Start zu Ende)
-    minThickness = 1, 
-    maxThickness = 1       # Konstante Dicke
+<!-- ----------------------------------------------------------------------- -->
+<!-- ----------------------------------------------------------------------- -->
+<!-- ----------------------------------------------------------------------- -->
+
+## Karte Geburtsort nach Linie
+
+Varianten mit verschiedenem Versatz der Punkte, um Überlagerungen zu reduzieren. Je höher der Versatz, desto stärker die Verschiebung der Punkte. Allerdings kann ein zu hoher Versatz die Genauigkeit der Darstellung beeinträchtigen. Es empfiehlt sich, verschiedene Werte auszuprobieren, um den besten Kompromiss zwischen Sichtbarkeit und Genauigkeit zu finden.             ^^^^^^^^^^
+
+<!-- ----------------------------------------------------------------------- -->
+::: {.panel-tabset}
+
+```{r}
+# leichtes Rauschen
+data <- data |>
+  mutate(
+    lat1x = jitter(LAT_GEBURT, factor = 1),
+    lon1x = jitter(LON_GEBURT, factor = 1),
+    lat5x = jitter(LAT_GEBURT, factor = 5),
+    lon5x = jitter(LON_GEBURT, factor = 5),
+    lat10x = jitter(LAT_GEBURT, factor = 10),
+    lon10x = jitter(LON_GEBURT, factor = 10),
+    lat30x = jitter(LAT_GEBURT, factor = 10),
+    lon30x = jitter(LON_GEBURT, factor = 10),
+    lat50x = jitter(LAT_GEBURT, factor = 10),
+    lon50x = jitter(LON_GEBURT, factor = 10),
   )
 ```
 
-noch eine Version ohne Pfeile, dafür mit End-Bubble (Kind Geburt)
+### Versatz = 1
+```{r }
+leaflet(options = leafletOptions(attributionControl = FALSE), data) |>
+  add_custom_layers() |> 
+  addCircleMarkers(
+    ~lon1x,
+    ~lat1x,
+    radius = 4,
+    fillColor = ~ cols(LINIE),
+    color = c("black", "black"),
+    fillOpacity = 0.8,
+    weight = 1,
+    popup = ~ str_c(VORNAME, " ", NACHNAME)
+  ) |>
+  addControl(html = legend_html, position = "bottomright")
 
-Farben der Linie des Elternteils!
-
-
-```{r}
-# datV1_kinder$farbe <- cols(datV1_kinder$Linie)
-
-# leaflet(datV1_kinder) |>
-#   addTiles() |>
-#   addPolylines(
-#     lng = ~c(lon1, lon2),
-#     lat = ~c(lat1, lat2),
-#     color = "blue",
-#     weight = 1
-#   ) #|> 
-#   # addCircleMarkers(
-#   #   ~lon2,
-#   #   ~lat2,
-#   #   radius = 3,
-#   #   fillColor = ~ cols(Linie),
-#   #   color = c("black", "black"),
-#   #   fillOpacity = 0.8,
-#   #   weight = 1,
-#   #   popup = ~ str_c("Elternteil: ", Vorname, " ", Name, " - Kind: ", Vorname_Kind, " ", Name_Kind)
-#   # )
 ```
 
-```{r}
-datV1_kinder$farbe <- cols(datV1_kinder$Linie)
+### Versatz = 5
+```{r }
+leaflet(options = leafletOptions(attributionControl = FALSE), data) |>
+  add_custom_layers() |> 
+  addCircleMarkers(
+    ~lon5x,
+    ~lat5x,
+    radius = 4,
+    fillColor = ~ cols(LINIE),
+    color = c("black", "black"),
+    fillOpacity = 0.8,
+    weight = 1,
+    popup = ~ str_c(VORNAME, " ", NACHNAME)
+  ) |>
+  addControl(html = legend_html, position = "bottomright")
 
-map <- leaflet() |>
+```
+
+
+### Versatz = 10
+```{r }
+leaflet(options = leafletOptions(attributionControl = FALSE), data) |>
+  add_custom_layers() |> 
+  addCircleMarkers(
+    ~lon10x,
+    ~lat10x,
+    radius = 4,
+    fillColor = ~ cols(LINIE),
+    color = c("black", "black"),
+    fillOpacity = 0.8,
+    weight = 1,
+    popup = ~ str_c(VORNAME, " ", NACHNAME)
+  ) |>
+  addControl(html = legend_html, position = "bottomright")
+
+```
+
+### Versatz = 30
+```{r }
+leaflet(options = leafletOptions(attributionControl = FALSE), data) |>
+  add_custom_layers() |> 
+  addCircleMarkers(
+    ~lon30x,
+    ~lat30x,
+    radius = 4,
+    fillColor = ~ cols(LINIE),
+    color = c("black", "black"),
+    fillOpacity = 0.8,
+    weight = 1,
+    popup = ~ str_c(VORNAME, " ", NACHNAME)
+  ) |>
+  addControl(html = legend_html, position = "bottomright")
+
+```
+
+### Versatz = 50
+```{r }
+leaflet(options = leafletOptions(attributionControl = FALSE), data) |>
+  add_custom_layers() |> 
+  addCircleMarkers(
+    ~lon50x,
+    ~lat50x,
+    radius = 4,
+    fillColor = ~ cols(LINIE),
+    color = c("black", "black"),
+    fillOpacity = 0.8,
+    weight = 1,
+    popup = ~ str_c(VORNAME, " ", NACHNAME)
+  ) |>
+  addControl(html = legend_html, position = "bottomright")
+
+```
+
+:::
+<!-- ----------------------------------------------------------------------- -->
+
+<!-- ----------------------------------------------------------------------- -->
+<!-- ----------------------------------------------------------------------- -->
+<!-- ----------------------------------------------------------------------- -->
+
+## Karte Kind-Geburt zu Eltern-Geburt
+
+
+Kinder zu Eltern (mit Geo-Daten von Kind, Mutter und/oder Vater) - 
+das heißt für ein Kind können auch zwei Linien gezeichnet werden, wenn sowohl Mutter als auch Vater Geo-Daten haben.
+
+Ich nehme hier erst mal keinen Versatz, kannst du gerne wählen ob oder ob nicht - macht das Sinn?
+
+
+
+<!-- ----------------------------------------------------------------------- -->
+::: {.panel-tabset}
+
+
+
+```{r}
+# Test nur mit Vater
+# datVater <- data |> filter(KM_KIND_VATER > 30)
+
+# leaflet(datVater) |>
+#   addTiles() |>
+#   addFlows(
+#     lng0 = datVater$LON_GEBURT, lat0 = datVater$LAT_GEBURT, # Startpunkte
+#     lng1 = datVater$LON_GEB_VATER, lat1 = datVater$LAT_GEB_VATER, # Endpunkte
+#     color = "blue",
+#     flow = 1,              # Bestimmt die Richtung (1 = Start zu Ende)
+#     minThickness = 2, 
+#     maxThickness = 2       # Konstante Dicke
+#   )
+```
+
+```{r datEltern}
+datVater <- data |> 
+  filter(!is.na(LAT_GEB_VATER) & !is.na(LON_GEB_VATER)) |> 
+  select(ID, VORNAME, NACHNAME, LAT_GEBURT, LON_GEBURT, LINIE, # KIND
+  LAT_GEB_VATER, LON_GEB_VATER, VORNAME_VATER, NACHNAME_VATER, KM_KIND_VATER) |> # VATER
+  rename(
+    LAT_GEB_ELTERN = LAT_GEB_VATER,
+    LON_GEB_ELTERN = LON_GEB_VATER,
+    VORNAME_ELTERN = VORNAME_VATER,
+    NACHNAME_ELTERN = NACHNAME_VATER,
+    KM_KIND_ELTERN = KM_KIND_VATER
+  ) |> 
+  mutate(Eltern = "Vater")
+
+datMutter <- data |> 
+  filter(!is.na(LAT_GEB_MUTTER) & !is.na(LON_GEB_MUTTER)) |> 
+  select(ID, VORNAME, NACHNAME, LAT_GEBURT, LON_GEBURT, LINIE, # KIND
+  LAT_GEB_MUTTER, LON_GEB_MUTTER, VORNAME_MUTTER, NACHNAME_MUTTER, KM_KIND_MUTTER) |> # MUTTER
+  rename(
+    LAT_GEB_ELTERN = LAT_GEB_MUTTER,
+    LON_GEB_ELTERN = LON_GEB_MUTTER,
+    VORNAME_ELTERN = VORNAME_MUTTER,
+    NACHNAME_ELTERN = NACHNAME_MUTTER,
+    KM_KIND_ELTERN = KM_KIND_MUTTER
+  ) |> 
+  mutate(Eltern = "Mutter")
+
+# beide Datensätze zusammenführen
+datEltern <- bind_rows(datVater, datMutter)
+
+# Farbe Spalte für 
+datEltern$Farben <- ifelse(datEltern$LINIE == "V", "#469bf2", "red")
+
+```
+
+
+```{r}
+# km <- 20
+# datFilter <- datEltern |> filter(KM_KIND_ELTERN > km)
+
+# #farben <- ifelse(datFilter$Eltern == "Vater", "#469bf2", "red")
+
+# # drucke die Anzahl der verbleibenden Datensätze
+# print(paste("Anzahl der Datensätze mit KM_KIND_ELTERN > ", km , ":", nrow(datFilter)))
+
+# leaflet(datFilter) |>
+#   addTiles() |>
+#   addFlows(
+#     lng0 = datFilter$LON_GEBURT, lat0 = datFilter$LAT_GEBURT, # Startpunkte
+#     lng1 = datFilter$LON_GEB_ELTERN, lat1 = datFilter$LAT_GEB_ELTERN, # Endpunkte
+#     color = datFilter$Farben,
+#     flow = 1,              # Bestimmt die Richtung (1 = Start zu Ende)
+#     minThickness = 2, 
+#     maxThickness = 2       # Konstante Dicke
+#   )
+
+```
+
+### Filterung > 20 km
+```{r}
+km <- 20
+datFilter <- datEltern |> filter(KM_KIND_ELTERN > km)
+
+# drucke die Anzahl der verbleibenden Datensätze
+print(paste("Anzahl der Datensätze mit KM_KIND_ELTERN > ", km , ":", nrow(datFilter)))
+
+map <- leaflet(datFilter) |>
   addTiles()
 
-for(i in seq_len(nrow(datV1_kinder))) {
+for (i in seq_len(nrow(datFilter))) {
   map <- addPolylines(
     map,
-    lng = c(datV1_kinder$lon1[i], datV1_kinder$lon2[i]),
-    lat = c(datV1_kinder$lat1[i], datV1_kinder$lat2[i]),
-    color = datV1_kinder$farbe[i],
-    weight = 2
+    lng = c(datFilter$LON_GEBURT[i], datFilter$LON_GEB_ELTERN[i]),
+    lat = c(datFilter$LAT_GEBURT[i], datFilter$LAT_GEB_ELTERN[i]),
+    color = datFilter$Farben[i],
+    weight = 2,
+    popup = paste("Linie: ", datFilter$LINIE[i],
+    "Kind: ", datFilter$VORNAME[i], datFilter$NACHNAME[i], "<br>zu - Eltern: ", datFilter$VORNAME_ELTERN[i], datFilter$NACHNAME_ELTERN[i])
   )
 }
-#map
-map |> 
-    addCircleMarkers(
-   data = datV1_kinder,
-    ~lon2,
-    ~lat2,
-    radius = 3,
-    fillColor = ~ cols(Linie),
-    color = c("black", "black"),
-    fillOpacity = 0.8,
-    weight = 1,
-    popup = ~ str_c("Elternteil: ", Vorname, " ", Name, " - Kind: ", Vorname_Kind, " ", Name_Kind)
-  )
+
+map
+
 ```
+
+### Filterung > 30 km
+```{r}
+km <- 30
+datFilter <- datEltern |> filter(KM_KIND_ELTERN > km)
+
+# drucke die Anzahl der verbleibenden Datensätze
+print(paste("Anzahl der Datensätze mit KM_KIND_ELTERN > ", km , ":", nrow(datFilter)))
+
+map <- leaflet(datFilter) |>
+  addTiles()
+
+for (i in seq_len(nrow(datFilter))) {
+  map <- addPolylines(
+    map,
+    lng = c(datFilter$LON_GEBURT[i], datFilter$LON_GEB_ELTERN[i]),
+    lat = c(datFilter$LAT_GEBURT[i], datFilter$LAT_GEB_ELTERN[i]),
+    color = datFilter$Farben[i],
+    weight = 2,
+    popup = paste("Linie: ", datFilter$LINIE[i],
+    "Kind: ", datFilter$VORNAME[i], datFilter$NACHNAME[i], "<br>zu - Eltern: ", datFilter$VORNAME_ELTERN[i], datFilter$NACHNAME_ELTERN[i])
+  )
+}
+
+map
+
+```
+
+### Filterung > 40 km
+```{r}
+km <- 40
+datFilter <- datEltern |> filter(KM_KIND_ELTERN > km)
+
+# drucke die Anzahl der verbleibenden Datensätze
+print(paste("Anzahl der Datensätze mit KM_KIND_ELTERN > ", km , ":", nrow(datFilter)))
+
+map <- leaflet(datFilter) |>
+  addTiles()
+
+for (i in seq_len(nrow(datFilter))) {
+  map <- addPolylines(
+    map,
+    lng = c(datFilter$LON_GEBURT[i], datFilter$LON_GEB_ELTERN[i]),
+    lat = c(datFilter$LAT_GEBURT[i], datFilter$LAT_GEB_ELTERN[i]),
+    color = datFilter$Farben[i],
+    weight = 2,
+    popup = paste("Linie: ", datFilter$LINIE[i],
+    "Kind: ", datFilter$VORNAME[i], datFilter$NACHNAME[i], "<br>zu - Eltern: ", datFilter$VORNAME_ELTERN[i], datFilter$NACHNAME_ELTERN[i])
+  )
+}
+
+map
+
+```
+
+
+:::
+<!-- ----------------------------------------------------------------------- -->
