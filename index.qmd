@@ -939,7 +939,11 @@ for (i in seq_len(nrow(datFilter))) {
 
 :::
 <!-- ----------------------------------------------------------------------- -->
+<!-- ----------------------------------------------------------------------- -->
+<!-- ----------------------------------------------------------------------- -->
 
+<!-- ----------------------------------------------------------------------- -->
+<!-- ----------------------------------------------------------------------- -->
 <!-- ----------------------------------------------------------------------- -->
 
 ## Karten Wanderungen
@@ -986,8 +990,7 @@ drawMapV1 <- function(data, col) {
       flow = 1,              # Bestimmt die Richtung (1 = Start zu Ende)
       minThickness = 1, 
       maxThickness = 1,       # Konstante Dicke,
-      popup = popupArgs(labels = 
-        as.list(paste("Eltern: ", data$VORNAME, data$NACHNAME)))
+      popup = popupArgs(html = paste("Eltern: ", data$VORNAME, data$NACHNAME))
     )
   # V1: mit Pfeilspitzen
   leaflet(data) |>
@@ -999,8 +1002,7 @@ drawMapV1 <- function(data, col) {
       flow = 1,              # Bestimmt die Richtung (1 = Start zu Ende)
       minThickness = 1, 
       maxThickness = 1,       # Konstante Dicke,
-      popup = popupArgs(labels = 
-        as.list(paste("Eltern: ", data$VORNAME, data$NACHNAME)))
+      popup = popupArgs(html = paste("Eltern: ", data$VORNAME, data$NACHNAME))
     )
 }
 drawMapV2 <- function(data, col) {
@@ -1014,8 +1016,7 @@ drawMapV2 <- function(data, col) {
       flow = 1,              # Bestimmt die Richtung (1 = Start zu Ende)
       minThickness = 1, 
       maxThickness = 1,       # Konstante Dicke,
-      popup = popupArgs(labels = 
-        as.list(paste("Eltern: ", data$VORNAME, data$NACHNAME)))
+      popup = popupArgs(html = paste("Eltern: ", data$VORNAME, data$NACHNAME))
     )
 
   for (i in seq_len(nrow(data))) {

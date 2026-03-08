@@ -30,13 +30,38 @@ dataMutter <- dataMutter |>
     )
 
 
+
+
 # ..............................................................................
 # Vater
-#data <- dataVater
-#col <- "blue"
+data <- dataVater
+col <- "blue"
 # create popup strings and convert to a list (one element per row)
+popup_labels <- as.list(paste("Eltern: ", data$VORNAME, data$NACHNAME))
+
+
+leaflet(data) |>
+  addTiles() |>
+  addFlows(
+    lng0 = data$LON_GEBURT, lat0 = data$LAT_GEBURT, # Startpunkte
+    lng1 = data$LON_GEBURT_KIND, lat1 = data$LAT_GEBURT_KIND, # Endpunkte
+    color = col,
+    flow = 1,              # Bestimmt die Richtung (1 = Start zu Ende)
+    minThickness = 1, 
+    maxThickness = 1,       # Konstante Dicke,
+    popup = popupArgs(html = paste("Eltern: ", data$VORNAME, data$NACHNAME))
+  )
+
+
+
+
+
+
+
 
 drawMapV1 <- function(data, col) {
+  popup_labels <- as.list(paste("Eltern: ", data$VORNAME, data$NACHNAME))
+
   leaflet(data) |>
     addTiles() |>
     addFlows(
@@ -46,24 +71,12 @@ drawMapV1 <- function(data, col) {
       flow = 1,              # Bestimmt die Richtung (1 = Start zu Ende)
       minThickness = 1, 
       maxThickness = 1,       # Konstante Dicke,
-      popup = popupArgs(labels = 
-        as.list(paste("Eltern: ", data$VORNAME, data$NACHNAME)))
-    )
-  # V1: mit Pfeilspitzen
-  leaflet(data) |>
-    addTiles() |>
-    addFlows(
-      lng0 = data$LON_GEBURT, lat0 = data$LAT_GEBURT, # Startpunkte
-      lng1 = data$LON_GEBURT_KIND, lat1 = data$LAT_GEBURT_KIND, # Endpunkte
-      color = col,
-      flow = 1,              # Bestimmt die Richtung (1 = Start zu Ende)
-      minThickness = 1, 
-      maxThickness = 1,       # Konstante Dicke,
-      popup = popupArgs(labels = 
-        as.list(paste("Eltern: ", data$VORNAME, data$NACHNAME)))
-    )
+    popup = popupArgs(html = paste("Eltern: ", data$VORNAME, data$NACHNAME))
+)
 }
 drawMapV2 <- function(data, col) {
+  popup_labels <- as.list(paste("Eltern: ", data$VORNAME, data$NACHNAME))
+
   # V2: mit Bubbles am Ende
   map <- leaflet(data) |>
     addTiles() |> 
@@ -74,8 +87,7 @@ drawMapV2 <- function(data, col) {
       flow = 1,              # Bestimmt die Richtung (1 = Start zu Ende)
       minThickness = 1, 
       maxThickness = 1,       # Konstante Dicke,
-      popup = popupArgs(labels = 
-        as.list(paste("Eltern: ", data$VORNAME, data$NACHNAME)))
+    popup = popupArgs(html = paste("Eltern: ", data$VORNAME, data$NACHNAME))
     )
 
   for (i in seq_len(nrow(data))) {
