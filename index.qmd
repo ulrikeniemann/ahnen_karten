@@ -30,7 +30,9 @@ library(RColorBrewer)
 ```{r data}
 # ------------------------------------------------------------------------------
 # Daten laden
+#
 data_orig <- read_excel("./data/Niemann-26.02.2026_select.xlsx")
+#data_orig <- read_excel("./data/Niemann_alles_03.03.2026.xlsx")
 ```
 
 
@@ -324,9 +326,48 @@ leaflet(options = leafletOptions(attributionControl = FALSE), data) |>
 
 ```
 
-
-
 :::
+<!-- ----------------------------------------------------------------------- -->
+<!-- ----------------------------------------------------------------------- -->
+
+### Vaterlinie
+
+(hier: ohne Versatz - anpassen?)
+
+```{r }
+leaflet(options = leafletOptions(attributionControl = FALSE), 
+data |> filter(LINIE == "V")) |>
+  add_custom_layers() |> 
+  addCircleMarkers(
+    ~LON_GEBURT,
+    ~LAT_GEBURT,
+    radius = 4,
+    fillColor = ~ cols(LINIE),
+    color = c("black", "black"),
+    fillOpacity = 0.8,
+    weight = 1,
+    popup = ~ str_c(VORNAME, " ", NACHNAME)
+  )
+```
+
+### Mutterlinie
+
+```{r }
+leaflet(options = leafletOptions(attributionControl = FALSE), 
+data |> filter(LINIE == "M")) |>
+  add_custom_layers() |> 
+  addCircleMarkers(
+    ~LON_GEBURT,
+    ~LAT_GEBURT,
+    radius = 4,
+    fillColor = ~ cols(LINIE),
+    color = c("black", "black"),
+    fillOpacity = 0.8,
+    weight = 1,
+    popup = ~ str_c(VORNAME, " ", NACHNAME)
+  )
+```
+
 <!-- ----------------------------------------------------------------------- -->
 
 ## Karte Geburtsort nach Generation
@@ -717,15 +758,13 @@ map
 :::
 <!-- ----------------------------------------------------------------------- -->
 
-## Test: mit Label
+<!-- ## Test: mit Label -->
 
 <!-- ----------------------------------------------------------------------- -->
-::: {.panel-tabset}
+<!-- ::: {.panel-tabset} -->
 
-
-
-### V1 - nur Kind
-```{r}
+<!-- ### V1 - nur Kind -->
+```{r, eval = FALSE}
 map <- leaflet(datFilter) |>
   addTiles()
 
@@ -780,8 +819,8 @@ map
 
 ```
 
-### V2 - Kind (rechts) und Eltern (links)
-```{r}
+<!-- ### V2 - Kind (rechts) und Eltern (links) -->
+```{r, eval = FALSE}
 map <- leaflet(datFilter) |>
   addTiles()
 
@@ -856,8 +895,8 @@ for (i in seq_len(nrow(datFilter))) {
   
 ```
 
-### V3 - mit Gruppierung
-```{r}
+<!-- ### V3 - mit Gruppierung -->
+```{r, eval = FALSE}
 
 txt <- "(hier muss man reinscrollen)"
 knitr::asis_output(htmltools::HTML(txt))
@@ -937,7 +976,7 @@ for (i in seq_len(nrow(datFilter))) {
 ```
 
 
-:::
+<!-- ::: -->
 <!-- ----------------------------------------------------------------------- -->
 <!-- ----------------------------------------------------------------------- -->
 <!-- ----------------------------------------------------------------------- -->
@@ -980,18 +1019,7 @@ dataMutter <- dataMutter |>
     )
 
 # function für Karten
-drawMapV1 <- function(data, col) {
-  leaflet(data) |>
-    addTiles() |>
-    addFlows(
-      lng0 = data$LON_GEBURT, lat0 = data$LAT_GEBURT, # Startpunkte
-      lng1 = data$LON_GEBURT_KIND, lat1 = data$LAT_GEBURT_KIND, # Endpunkte
-      color = col,
-      flow = 1,              # Bestimmt die Richtung (1 = Start zu Ende)
-      minThickness = 1, 
-      maxThickness = 1,       # Konstante Dicke,
-      popup = popupArgs(html = paste("Eltern: ", data$VORNAME, data$NACHNAME))
-    )
+drawMapV1 <- function(data, col, size = 1) {
   # V1: mit Pfeilspitzen
   leaflet(data) |>
     addTiles() |>
@@ -1000,12 +1028,12 @@ drawMapV1 <- function(data, col) {
       lng1 = data$LON_GEBURT_KIND, lat1 = data$LAT_GEBURT_KIND, # Endpunkte
       color = col,
       flow = 1,              # Bestimmt die Richtung (1 = Start zu Ende)
-      minThickness = 1, 
-      maxThickness = 1,       # Konstante Dicke,
+      minThickness = size, 
+      maxThickness = size,       # Konstante Dicke,
       popup = popupArgs(html = paste("Eltern: ", data$VORNAME, data$NACHNAME))
     )
 }
-drawMapV2 <- function(data, col) {
+drawMapV2 <- function(data, col, size = 1) {
   # V2: mit Bubbles am Ende
   map <- leaflet(data) |>
     addTiles() |> 
@@ -1014,8 +1042,8 @@ drawMapV2 <- function(data, col) {
       lng1 = data$LON_GEBURT_KIND, lat1 = data$LAT_GEBURT_KIND, # Endpunkte
       color = col,
       flow = 1,              # Bestimmt die Richtung (1 = Start zu Ende)
-      minThickness = 1, 
-      maxThickness = 1,       # Konstante Dicke,
+      minThickness = size, 
+      maxThickness = size,       # Konstante Dicke,
       popup = popupArgs(html = paste("Eltern: ", data$VORNAME, data$NACHNAME))
     )
 
@@ -1039,29 +1067,90 @@ drawMapV2 <- function(data, col) {
 
 ### Vaterlinie
 
+::: {.panel-tabset}
+
+### size = 1
 ```{r}
-drawMapV1(dataVater, "blue")
+drawMapV1(dataVater, "blue", size = 1)
 
 # füge Leerzeilen im html ein
 txt <- paste("<br><br><br>")
 knitr::asis_output(htmltools::HTML(txt))
 
-drawMapV2(dataVater, "blue")
+drawMapV2(dataVater, "blue", size = 1)
 
 ```
+
+### size = 1.5
+```{r}
+drawMapV1(dataVater, "blue", size = 1.5)
+
+# füge Leerzeilen im html ein
+txt <- paste("<br><br><br>")
+knitr::asis_output(htmltools::HTML(txt))
+
+drawMapV2(dataVater, "blue", size = 1.5)
+
+```
+
+### size = 2
+```{r}
+drawMapV1(dataVater, "blue", size = 2)
+
+# füge Leerzeilen im html ein
+txt <- paste("<br><br><br>")
+knitr::asis_output(htmltools::HTML(txt))
+
+drawMapV2(dataVater, "blue", size = 2)
+
+```
+
+::: 
+<!-- ----------------------------------------------------------------------- -->
 
 ### Mutterlinie
 
+::: {.panel-tabset}
+
+### size = 1
 ```{r}
-drawMapV1(dataMutter, "red")
+drawMapV1(dataMutter, "red", size = 1)
 
 # füge Leerzeilen im html ein
 txt <- paste("<br><br><br>")
 knitr::asis_output(htmltools::HTML(txt))
 
-drawMapV2(dataMutter, "red")
+drawMapV2(dataMutter, "red", size = 1)
+
+```
+
+### size = 1.5
+```{r}
+drawMapV1(dataMutter, "red", size = 1.5)
+
+# füge Leerzeilen im html ein
+txt <- paste("<br><br><br>")
+knitr::asis_output(htmltools::HTML(txt))
+
+drawMapV2(dataMutter, "red", size = 1.5)
+
+```
+
+### size = 2
+```{r}
+drawMapV1(dataMutter, "red", size = 2)
+
+# füge Leerzeilen im html ein
+txt <- paste("<br><br><br>")
+knitr::asis_output(htmltools::HTML(txt))
+
+drawMapV2(dataMutter, "red", size = 2)
 
 ```
 
 
 
+:::
+<!-- ----------------------------------------------------------------------- -->
+<!-- ----------------------------------------------------------------------- -->
+<!-- ----------------------------------------------------------------------- -->
