@@ -434,7 +434,7 @@ dataMutter <- dataMutter |>
 # function für Karten
 drawMapV1 <- function(data, col, size = 1) {
   # V1: mit Pfeilspitzen
-  leaflet(data) |>
+  leaflet(options = leafletOptions(attributionControl = FALSE), data) |>
     addTiles() |>
     addFlows(
       lng0 = data$LON_GEBURT, lat0 = data$LAT_GEBURT, # Startpunkte
@@ -448,7 +448,7 @@ drawMapV1 <- function(data, col, size = 1) {
 }
 drawMapV2 <- function(data, col, size = 1) {
   # V2: mit Bubbles am Ende
-  map <- leaflet(data) |>
+  map <- leaflet(options = leafletOptions(attributionControl = FALSE), data) |>
     addTiles() |> 
         addFlows(
       lng0 = data$LON_GEBURT, lat0 = data$LAT_GEBURT, # Startpunkte
