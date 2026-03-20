@@ -25,6 +25,8 @@ library(geosphere)
 library(leaflet)
 library(leaflet.minicharts)
 library(RColorBrewer)
+
+blauTon <- "#0f74dc"
 ```
 
 ```{r data}
@@ -168,7 +170,7 @@ legend_html <- paste0("
 ")
 
 # Farben für Darstellung nach Linie
-col <- c("red", "#469bf2")
+col <- c("red", blauTon) #"#469bf2"
 lev <- unique(data$LINIE)
 lev <- lev[!is.na(lev)]
 cols <- colorFactor(palette = col, unique(na.omit(data$LINIE)))
@@ -212,7 +214,7 @@ data <- data |>
   )
 ```
 
-### Versatz = 0
+### Versatz = 0, Radius = 4
 ```{r }
 leaflet(options = leafletOptions(attributionControl = FALSE), data) |>
   add_custom_layers() |> 
@@ -230,15 +232,15 @@ leaflet(options = leafletOptions(attributionControl = FALSE), data) |>
 
 ```
 
-### Versatz = 1
+### Versatz = 1, Radius = 3
 ```{r }
 leaflet(options = leafletOptions(attributionControl = FALSE), data) |>
   add_custom_layers() |> 
-  setView(lng = 11.4149, lat = 53.6278, zoom = 11) |> 
+  #setView(lng = 11.4149, lat = 53.6278, zoom = 11) |> 
   addCircleMarkers(
     ~lon1x,
     ~lat1x,
-    radius = 4,
+    radius = 3,
     fillColor = ~ cols(LINIE),
     color = c("black", "black"),
     fillOpacity = 0.8,
@@ -249,15 +251,15 @@ leaflet(options = leafletOptions(attributionControl = FALSE), data) |>
 
 ```
 
-### Versatz = 3
+### Versatz = 3, Radius = 2
 ```{r }
 leaflet(options = leafletOptions(attributionControl = FALSE), data) |>
   add_custom_layers() |> 
-  setView(lng = 11.4149, lat = 53.6278, zoom = 11) |>   
+  #setView(lng = 11.4149, lat = 53.6278, zoom = 11) |>   
   addCircleMarkers(
     ~lon3x,
     ~lat3x,
-    radius = 4,
+    radius = 2,
     fillColor = ~ cols(LINIE),
     color = c("black", "black"),
     fillOpacity = 0.8,
@@ -396,590 +398,6 @@ leaflet(options = leafletOptions(attributionControl = FALSE), data) |>
 <!-- ----------------------------------------------------------------------- -->
 <!-- ----------------------------------------------------------------------- -->
 
-## Karte Linie Kind-Geburt - Eltern-Geburt
-
-
-Kinder zu Eltern (mit Geo-Daten von Kind, Mutter und/oder Vater) - 
-das heißt für ein Kind können auch zwei Linien gezeichnet werden, wenn sowohl Mutter als auch Vater Geo-Daten haben.
-
-Ich nehme hier erst mal keinen Versatz, kannst du gerne wählen ob oder ob nicht - macht das Sinn?
-
-Linienstärke dürfte für Druck auch relevant sein, hier mehere Versionen zur Auswahl.
-
-(Generation = 0 fehlt weil keine Eintrag für Linie)
-
-
-
-```{r datEltern}
-datVater <- data |> 
-  filter(!is.na(LAT_GEB_VATER) & !is.na(LON_GEB_VATER)) |> 
-  select(ID, VORNAME, NACHNAME, LAT_GEBURT, LON_GEBURT, LINIE, GENERATION, colGen, # KIND
-  LAT_GEB_VATER, LON_GEB_VATER, VORNAME_VATER, NACHNAME_VATER, KM_KIND_VATER) |> # VATER
-  rename(
-    LAT_GEB_ELTERN = LAT_GEB_VATER,
-    LON_GEB_ELTERN = LON_GEB_VATER,
-    VORNAME_ELTERN = VORNAME_VATER,
-    NACHNAME_ELTERN = NACHNAME_VATER,
-    KM_KIND_ELTERN = KM_KIND_VATER
-  ) |> 
-  mutate(Eltern = "Vater")
-
-datMutter <- data |> 
-  filter(!is.na(LAT_GEB_MUTTER) & !is.na(LON_GEB_MUTTER)) |> 
-  select(ID, VORNAME, NACHNAME, LAT_GEBURT, LON_GEBURT, LINIE, GENERATION, colGen, # KIND
-  LAT_GEB_MUTTER, LON_GEB_MUTTER, VORNAME_MUTTER, NACHNAME_MUTTER, KM_KIND_MUTTER) |> # MUTTER
-  rename(
-    LAT_GEB_ELTERN = LAT_GEB_MUTTER,
-    LON_GEB_ELTERN = LON_GEB_MUTTER,
-    VORNAME_ELTERN = VORNAME_MUTTER,
-    NACHNAME_ELTERN = NACHNAME_MUTTER,
-    KM_KIND_ELTERN = KM_KIND_MUTTER
-  ) |> 
-  mutate(Eltern = "Mutter")
-
-# beide Datensätze zusammenführen
-datEltern <- bind_rows(datVater, datMutter)
-rm(datVater, datMutter)
-
-# Farbe Spalte für 
-datEltern$Farben <- ifelse(datEltern$LINIE == "V", "#469bf2", "red")
-
-```
-
-### Farbe nach Linie
-
-Mausklick in Mitte der Linie: Linie, Name des Kindes, Name der Eltern.
-
-<!-- ----------------------------------------------------------------------- -->
-::: {.panel-tabset}
-
-### Filterung > 20 km, Linienstärke 1
-```{r}
-km <- 20
-datFilter <- datEltern |> filter(KM_KIND_ELTERN > km)
-
-# drucke die Anzahl der verbleibenden Datensätze
-txt <- paste("Anzahl der Datensätze mit KM_KIND_ELTERN > ", km , ":", nrow(datFilter))
-knitr::asis_output(htmltools::HTML(txt))
-
-map <- leaflet(datFilter) |>
-  addTiles()
-
-for (i in seq_len(nrow(datFilter))) {
-  map <- addPolylines(
-    map,
-    lng = c(datFilter$LON_GEBURT[i], datFilter$LON_GEB_ELTERN[i]),
-    lat = c(datFilter$LAT_GEBURT[i], datFilter$LAT_GEB_ELTERN[i]),
-    color = datFilter$Farben[i],
-    weight = 1,
-    opacity = 1,
-    popup = paste("Linie: ", datFilter$LINIE[i],
-    "<br>Kind: ", datFilter$VORNAME[i], datFilter$NACHNAME[i], 
-    "<br>zu - Eltern: ", datFilter$VORNAME_ELTERN[i], datFilter$NACHNAME_ELTERN[i])
-  )
-}
-
-map
-
-```
-
-### Filterung > 30 km, Linienstärke 1.5
-```{r}
-km <- 30
-datFilter <- datEltern |> filter(KM_KIND_ELTERN > km)
-
-# drucke die Anzahl der verbleibenden Datensätze
-txt <- paste("Anzahl der Datensätze mit KM_KIND_ELTERN > ", km , ":", nrow(datFilter))
-knitr::asis_output(htmltools::HTML(txt))
-
-map <- leaflet(datFilter) |>
-  addTiles()
-
-for (i in seq_len(nrow(datFilter))) {
-  map <- addPolylines(
-    map,
-    lng = c(datFilter$LON_GEBURT[i], datFilter$LON_GEB_ELTERN[i]),
-    lat = c(datFilter$LAT_GEBURT[i], datFilter$LAT_GEB_ELTERN[i]),
-    color = datFilter$Farben[i],
-    weight = 1.5,
-    opacity = 1,
-    popup = paste("Linie: ", datFilter$LINIE[i],
-    "<br>Kind: ", datFilter$VORNAME[i], datFilter$NACHNAME[i], 
-    "<br>zu - Eltern: ", datFilter$VORNAME_ELTERN[i], datFilter$NACHNAME_ELTERN[i])
-  )
-}
-
-map
-
-```
-
-### Filterung > 40 km, Linienstärke 2
-```{r}
-km <- 40
-datFilter <- datEltern |> filter(KM_KIND_ELTERN > km)
-
-# drucke die Anzahl der verbleibenden Datensätze
-txt <- paste("Anzahl der Datensätze mit KM_KIND_ELTERN > ", km , ":", nrow(datFilter))
-knitr::asis_output(htmltools::HTML(txt))
-
-map <- leaflet(datFilter) |>
-  addTiles()
-
-for (i in seq_len(nrow(datFilter))) {
-  map <- addPolylines(
-    map,
-    lng = c(datFilter$LON_GEBURT[i], datFilter$LON_GEB_ELTERN[i]),
-    lat = c(datFilter$LAT_GEBURT[i], datFilter$LAT_GEB_ELTERN[i]),
-    color = datFilter$Farben[i],
-    weight = 2,
-    opacity = 1,
-    popup = paste("Linie: ", datFilter$LINIE[i],
-    "<br>Kind: ", datFilter$VORNAME[i], datFilter$NACHNAME[i], 
-    "<br>zu - Eltern: ", datFilter$VORNAME_ELTERN[i], datFilter$NACHNAME_ELTERN[i])
-  )
-}
-
-map
-
-```
-
-
-:::
-<!-- ----------------------------------------------------------------------- -->
-
-### Farbe nach Generation
-
-Variante mit Versatz = 10, damit die Bubbles auch nebeneinander sicht-/klickbar sind.
-
-Mausklick in Mitte der Linie: Generation, Name des Kindes, Name der Eltern.
-
-Mausklick auf Bubble: Name des Kindes bzw. Name der Eltern.
-
-<!-- ----------------------------------------------------------------------- -->
-::: {.panel-tabset}
-
-### > 10 km, kein Bubble
-```{r}
-km <- 10
-kmBubble <- 50
-datFilter <- datEltern |> filter(KM_KIND_ELTERN > km)
-
-
-# drucke die Anzahl der verbleibenden Datensätze
-txt <- paste("Anzahl der Datensätze mit KM_KIND_ELTERN > ", km , ":", nrow(datFilter))
-knitr::asis_output(htmltools::HTML(txt))
-
-map <- leaflet(datFilter) |>
-  addTiles()
-
-for (i in seq_len(nrow(datFilter))) {
-  map <- addPolylines(
-    map,
-    lng = c(datFilter$LON_GEBURT[i], datFilter$LON_GEB_ELTERN[i]),
-    lat = c(datFilter$LAT_GEBURT[i], datFilter$LAT_GEB_ELTERN[i]),
-    color = datFilter$colGen[i],
-    weight = 1,
-    opacity = 1,
-    popup = paste("Generation: ", datFilter$GENERATION[i],
-    "<br>Kind: ", datFilter$VORNAME[i], datFilter$NACHNAME[i], 
-    "<br>zu - Eltern: ", datFilter$VORNAME_ELTERN[i], datFilter$NACHNAME_ELTERN[i])
-  )
-}
-
-map
-
-```
-
-### > 20 km, Bubble ab 50 km
-```{r}
-km <- 20
-kmBubble <- 50
-datFilter <- datEltern |> filter(KM_KIND_ELTERN > km)
-datFilterBubble <- datFilter |> 
-  filter(KM_KIND_ELTERN > kmBubble)
-
-# drucke die Anzahl der verbleibenden Datensätze
-txt <- paste("Anzahl der Datensätze mit KM_KIND_ELTERN > ", km , ":", nrow(datFilter),
-"km <br>Anzahl der Datensätze mit KM_KIND_ELTERN > ", kmBubble , ":", nrow(datFilterBubble), " km")
-knitr::asis_output(htmltools::HTML(txt))
-
-map <- leaflet(datFilter) |>
-  addTiles()
-
-for (i in seq_len(nrow(datFilter))) {
-  map <- addPolylines(
-    map,
-    lng = c(datFilter$LON_GEBURT[i], datFilter$LON_GEB_ELTERN[i]),
-    lat = c(datFilter$LAT_GEBURT[i], datFilter$LAT_GEB_ELTERN[i]),
-    color = datFilter$colGen[i],
-    weight = 1,
-    opacity = 1,
-    popup = paste("Generation: ", datFilter$GENERATION[i],
-    "<br>Kind: ", datFilter$VORNAME[i], datFilter$NACHNAME[i], 
-    "<br>zu - Eltern: ", datFilter$VORNAME_ELTERN[i], datFilter$NACHNAME_ELTERN[i])
-  ) |> 
-  addCircleMarkers(
-    ~datFilterBubble$LON_GEBURT,
-    ~datFilterBubble$LAT_GEBURT,
-    radius = 4,
-    fillColor = ~ datFilterBubble$colGen,
-    color = c("black", "black"),
-    fillOpacity = 0.8,
-    weight = 1,
-    popup = ~ str_c("Kind: ", datFilterBubble$VORNAME, " ", datFilterBubble$NACHNAME)
-  ) |> 
-  addCircleMarkers(
-    ~datFilterBubble$LON_GEB_ELTERN,
-    ~datFilterBubble$LAT_GEB_ELTERN,
-    radius = 4,
-    fillColor = ~ datFilterBubble$colGen,
-    color = c("black", "black"),
-    fillOpacity = 0.8,
-    weight = 1,
-    popup = ~ str_c("Eltern: ", datFilterBubble$VORNAME_ELTERN, " ", datFilterBubble$NACHNAME_ELTERN)
-  )
-}
-
-map
-
-```
-
-### > 30 km, Bubble ab 60 km
-```{r}
-km <- 30
-kmBubble <- 60
-datFilter <- datEltern |> filter(KM_KIND_ELTERN > km)
-datFilterBubble <- datFilter |> 
-  filter(KM_KIND_ELTERN > kmBubble)
-
-# drucke die Anzahl der verbleibenden Datensätze
-txt <- paste("Anzahl der Datensätze mit KM_KIND_ELTERN > ", km , ":", nrow(datFilter),
-"km <br>Anzahl der Datensätze mit KM_KIND_ELTERN > ", kmBubble , ":", nrow(datFilterBubble), " km")
-knitr::asis_output(htmltools::HTML(txt))
-
-map <- leaflet(datFilter) |>
-  addTiles()
-
-for (i in seq_len(nrow(datFilter))) {
-  map <- addPolylines(
-    map,
-    lng = c(datFilter$LON_GEBURT[i], datFilter$LON_GEB_ELTERN[i]),
-    lat = c(datFilter$LAT_GEBURT[i], datFilter$LAT_GEB_ELTERN[i]),
-    color = datFilter$colGen[i],
-    weight = 1,
-    opacity = 1,
-    popup = paste("Generation: ", datFilter$GENERATION[i],
-    "<br>Kind: ", datFilter$VORNAME[i], datFilter$NACHNAME[i], 
-    "<br>zu - Eltern: ", datFilter$VORNAME_ELTERN[i], datFilter$NACHNAME_ELTERN[i])
-  ) |> 
-  addCircleMarkers(
-    ~datFilterBubble$LON_GEBURT,
-    ~datFilterBubble$LAT_GEBURT,
-    radius = 4,
-    fillColor = ~ datFilterBubble$colGen,
-    color = c("black", "black"),
-    fillOpacity = 0.8,
-    weight = 1,
-    popup = ~ str_c("Kind: ", datFilterBubble$VORNAME, " ", datFilterBubble$NACHNAME)
-  ) |> 
-  addCircleMarkers(
-    ~datFilterBubble$LON_GEB_ELTERN,
-    ~datFilterBubble$LAT_GEB_ELTERN,
-    radius = 4,
-    fillColor = ~ datFilterBubble$colGen,
-    color = c("black", "black"),
-    fillOpacity = 0.8,
-    weight = 1,
-    popup = ~ str_c("Eltern: ", datFilterBubble$VORNAME_ELTERN, " ", datFilterBubble$NACHNAME_ELTERN)
-  )
-}
-
-map
-
-```
-
-### > 40 km, Bubble ab 70 km
-```{r}
-km <- 40
-kmBubble <- 70
-datFilter <- datEltern |> filter(KM_KIND_ELTERN > km)
-datFilterBubble <- datFilter |> 
-  filter(KM_KIND_ELTERN > kmBubble)
-
-# drucke die Anzahl der verbleibenden Datensätze
-txt <- paste("Anzahl der Datensätze mit KM_KIND_ELTERN > ", km , ":", nrow(datFilter),
-"km <br>Anzahl der Datensätze mit KM_KIND_ELTERN > ", kmBubble , ":", nrow(datFilterBubble), " km")
-knitr::asis_output(htmltools::HTML(txt))
-
-map <- leaflet(datFilter) |>
-  addTiles()
-
-for (i in seq_len(nrow(datFilter))) {
-  map <- addPolylines(
-    map,
-    lng = c(datFilter$LON_GEBURT[i], datFilter$LON_GEB_ELTERN[i]),
-    lat = c(datFilter$LAT_GEBURT[i], datFilter$LAT_GEB_ELTERN[i]),
-    color = datFilter$colGen[i],
-    weight = 1,
-    opacity = 1,
-    popup = paste("Generation: ", datFilter$GENERATION[i],
-    "<br>Kind: ", datFilter$VORNAME[i], datFilter$NACHNAME[i], 
-    "<br>zu - Eltern: ", datFilter$VORNAME_ELTERN[i], datFilter$NACHNAME_ELTERN[i])
-  ) |> 
-  addCircleMarkers(
-    ~datFilterBubble$LON_GEBURT,
-    ~datFilterBubble$LAT_GEBURT,
-    radius = 4,
-    fillColor = ~ datFilterBubble$colGen,
-    color = c("black", "black"),
-    fillOpacity = 0.8,
-    weight = 1,
-    popup = ~ str_c("Kind: ", datFilterBubble$VORNAME, " ", datFilterBubble$NACHNAME)
-  ) |> 
-  addCircleMarkers(
-    ~datFilterBubble$LON_GEB_ELTERN,
-    ~datFilterBubble$LAT_GEB_ELTERN,
-    radius = 4,
-    fillColor = ~ datFilterBubble$colGen,
-    color = c("black", "black"),
-    fillOpacity = 0.8,
-    weight = 1,
-    popup = ~ str_c("Eltern: ", datFilterBubble$VORNAME_ELTERN, " ", datFilterBubble$NACHNAME_ELTERN)
-  )
-}
-
-map
-
-```
-
-
-
-
-:::
-<!-- ----------------------------------------------------------------------- -->
-
-<!-- ## Test: mit Label -->
-
-<!-- ----------------------------------------------------------------------- -->
-<!-- ::: {.panel-tabset} -->
-
-<!-- ### V1 - nur Kind -->
-```{r, eval = FALSE}
-map <- leaflet(datFilter) |>
-  addTiles()
-
-for (i in seq_len(nrow(datFilter))) {
-  map <- addPolylines(
-    map,
-    lng = c(datFilter$LON_GEBURT[i], datFilter$LON_GEB_ELTERN[i]),
-    lat = c(datFilter$LAT_GEBURT[i], datFilter$LAT_GEB_ELTERN[i]),
-    color = datFilter$colGen[i],
-    weight = 1,
-    opacity = 1,
-    popup = paste("Generation: ", datFilter$GENERATION[i],
-    "<br>Kind: ", datFilter$VORNAME[i], datFilter$NACHNAME[i], 
-    "<br>zu - Eltern: ", datFilter$VORNAME_ELTERN[i], datFilter$NACHNAME_ELTERN[i])
-  ) |> 
-  addCircleMarkers(
-    ~datFilterBubble$LON_GEBURT,
-    ~datFilterBubble$LAT_GEBURT,
-    radius = 4,
-    fillColor = ~ datFilterBubble$colGen,
-    color = c("black", "black"),
-    fillOpacity = 0.8,
-    weight = 1,
-    popup = ~ str_c("Kind: ", datFilterBubble$VORNAME, " ", datFilterBubble$NACHNAME),
-    # Label hinzufügen
-    label = ~paste0(datFilterBubble$VORNAME, " ", datFilterBubble$NACHNAME),
-    labelOptions = labelOptions(
-      noHide = TRUE,
-      direction = "right",
-      textsize = "12px",
-      style = list(
-        "color" = "#222",
-        "background" = "white",
-        "padding" = "2px 2px",
-        "border-radius" = "4px",
-        "box-shadow" = "0 1px 4px rgba(0,0,0,0.15)",
-        "font-size" = "10px"
-      ))) |> 
-  addCircleMarkers(
-    ~datFilterBubble$LON_GEB_ELTERN,
-    ~datFilterBubble$LAT_GEB_ELTERN,
-    radius = 4,
-    fillColor = ~ datFilterBubble$colGen,
-    color = c("black", "black"),
-    fillOpacity = 0.8,
-    weight = 1,
-    popup = ~ str_c("Eltern: ", datFilterBubble$VORNAME_ELTERN, " ", datFilterBubble$NACHNAME_ELTERN)
-  )
-}
-
-map
-
-```
-
-<!-- ### V2 - Kind (rechts) und Eltern (links) -->
-```{r, eval = FALSE}
-map <- leaflet(datFilter) |>
-  addTiles()
-
-for (i in seq_len(nrow(datFilter))) {
-  map <- addPolylines(
-    map,
-    lng = c(datFilter$LON_GEBURT[i], datFilter$LON_GEB_ELTERN[i]),
-    lat = c(datFilter$LAT_GEBURT[i], datFilter$LAT_GEB_ELTERN[i]),
-    color = datFilter$colGen[i],
-    weight = 1,
-    opacity = 1,
-    popup = paste("Generation: ", datFilter$GENERATION[i],
-    "<br>Kind: ", datFilter$VORNAME[i], datFilter$NACHNAME[i], 
-    "<br>zu - Eltern: ", datFilter$VORNAME_ELTERN[i], datFilter$NACHNAME_ELTERN[i])
-  ) |> 
-  addCircleMarkers(
-    ~datFilterBubble$LON_GEBURT,
-    ~datFilterBubble$LAT_GEBURT,
-    radius = 4,
-    fillColor = ~ datFilterBubble$colGen,
-    color = c("black", "black"),
-    fillOpacity = 0.8,
-    weight = 1,
-    popup = ~ str_c("Kind: ", datFilterBubble$VORNAME, " ", datFilterBubble$NACHNAME),
-    # Label hinzufügen
-    label = ~paste0(datFilterBubble$VORNAME, " ", datFilterBubble$NACHNAME),
-    #clusterOptions = markerClusterOptions(),
-    labelOptions = labelOptions(
-      noHide = TRUE,
-      direction = "right",
-      textsize = "12px",
-      style = list(
-    "color" = "#111",
-    "background" = "white",
-    "padding" = "2px 2px",
-    "border" = "1px solid rgba(0,0,0,0.1)",
-    "border-radius" = "4px",
-    "box-shadow" = "0 2px 4px rgba(0,0,0,0.12)",
-    "font-size" = "10px",
-    "line-height" = "1"
-      ))) |> 
-  addCircleMarkers(
-    ~datFilterBubble$LON_GEB_ELTERN,
-    ~datFilterBubble$LAT_GEB_ELTERN,
-    radius = 4,
-    fillColor = ~ datFilterBubble$colGen,
-    color = c("black", "black"),
-    fillOpacity = 0.8,
-    weight = 1,
-    popup = ~ str_c("Eltern: ", datFilterBubble$VORNAME_ELTERN, " ", datFilterBubble$NACHNAME_ELTERN),
-    # Label hinzufügen
-  label = ~paste0(datFilterBubble$VORNAME_ELTERN, " ", datFilterBubble$NACHNAME_ELTERN),
-  #clusterOptions = markerClusterOptions(),
-    labelOptions = labelOptions(
-      noHide = TRUE,
-      direction = "left",
-      textsize = "12px",
-      style = list(
-    "color" = "#111",
-    "background" = "white",
-    "padding" = "2px 2px",
-    "border" = "1px solid rgba(0,0,0,0.1)",
-    "border-radius" = "4px",
-    "box-shadow" = "0 2px 4px rgba(0,0,0,0.12)",
-    "font-size" = "10px",
-    "line-height" = "1"
-      ))
-  )
-    }
-  
-  map
-  
-```
-
-<!-- ### V3 - mit Gruppierung -->
-```{r, eval = FALSE}
-
-txt <- "(hier muss man reinscrollen)"
-knitr::asis_output(htmltools::HTML(txt))
-
-map <- leaflet(datFilter) |>
-  addTiles()
-
-for (i in seq_len(nrow(datFilter))) {
-  map <- addPolylines(
-    map,
-    lng = c(datFilter$LON_GEBURT[i], datFilter$LON_GEB_ELTERN[i]),
-    lat = c(datFilter$LAT_GEBURT[i], datFilter$LAT_GEB_ELTERN[i]),
-    color = datFilter$colGen[i],
-    weight = 1,
-    opacity = 1,
-    popup = paste("Generation: ", datFilter$GENERATION[i],
-    "<br>Kind: ", datFilter$VORNAME[i], datFilter$NACHNAME[i], 
-    "<br>zu - Eltern: ", datFilter$VORNAME_ELTERN[i], datFilter$NACHNAME_ELTERN[i])
-  ) |> 
-  addCircleMarkers(
-    ~datFilterBubble$LON_GEBURT,
-    ~datFilterBubble$LAT_GEBURT,
-    radius = 4,
-    fillColor = ~ datFilterBubble$colGen,
-    color = c("black", "black"),
-    fillOpacity = 0.8,
-    weight = 1,
-    popup = ~ str_c("Kind: ", datFilterBubble$VORNAME, " ", datFilterBubble$NACHNAME),
-    # Label hinzufügen
-    label = ~paste0(datFilterBubble$VORNAME, " ", datFilterBubble$NACHNAME),
-    clusterOptions = markerClusterOptions(),
-    labelOptions = labelOptions(
-      noHide = TRUE,
-      direction = "right",
-      textsize = "12px",
-      style = list(
-    "color" = "#111",
-    "background" = "white",
-    "padding" = "2px 2px",
-    "border" = "1px solid rgba(0,0,0,0.1)",
-    "border-radius" = "4px",
-    "box-shadow" = "0 2px 4px rgba(0,0,0,0.12)",
-    "font-size" = "10px",
-    "line-height" = "1"
-      ))) |> 
-  addCircleMarkers(
-    ~datFilterBubble$LON_GEB_ELTERN,
-    ~datFilterBubble$LAT_GEB_ELTERN,
-    radius = 4,
-    fillColor = ~ datFilterBubble$colGen,
-    color = c("black", "black"),
-    fillOpacity = 0.8,
-    weight = 1,
-    popup = ~ str_c("Eltern: ", datFilterBubble$VORNAME_ELTERN, " ", datFilterBubble$NACHNAME_ELTERN),
-    # Label hinzufügen
-  label = ~paste0(datFilterBubble$VORNAME_ELTERN, " ", datFilterBubble$NACHNAME_ELTERN),
-  clusterOptions = markerClusterOptions(),
-    labelOptions = labelOptions(
-      noHide = TRUE,
-      direction = "left",
-      textsize = "12px",
-      style = list(
-    "color" = "#111",
-    "background" = "white",
-    "padding" = "2px 2px",
-    "border" = "1px solid rgba(0,0,0,0.1)",
-    "border-radius" = "4px",
-    "box-shadow" = "0 2px 4px rgba(0,0,0,0.12)",
-    "font-size" = "10px",
-    "line-height" = "1"
-      ))
-  )
-    }
-  
-  map
-  
-```
-
-
-<!-- ::: -->
-<!-- ----------------------------------------------------------------------- -->
-<!-- ----------------------------------------------------------------------- -->
-<!-- ----------------------------------------------------------------------- -->
 
 <!-- ----------------------------------------------------------------------- -->
 <!-- ----------------------------------------------------------------------- -->
@@ -1053,10 +471,10 @@ drawMapV2 <- function(data, col, size = 1) {
       map,
       lng = data$LON_GEBURT_KIND[i],
       lat = data$LAT_GEBURT_KIND[i],
-      radius = 4,
+      radius = 3, #4,
       fillColor = ~ col,
-      color = col,
-      fillOpacity = 0.6,
+      color = "black", #col,
+      fillOpacity = 1,#0.6,
       weight = 1,
       popup = ~ str_c("Eltern: ", data$VORNAME[i], " ", data$NACHNAME[i], "<br>", 
       "(auch wenn die Bubble hier das Kind ist)"))
@@ -1071,37 +489,37 @@ drawMapV2 <- function(data, col, size = 1) {
 
 ### size = 1
 ```{r}
-drawMapV1(dataVater, "blue", size = 1)
+# drawMapV1(dataVater, "blue", size = 1)
 
-# füge Leerzeilen im html ein
-txt <- paste("<br><br><br>")
-knitr::asis_output(htmltools::HTML(txt))
+# # füge Leerzeilen im html ein
+# txt <- paste("<br><br><br>")
+# knitr::asis_output(htmltools::HTML(txt))
 
-drawMapV2(dataVater, "blue", size = 1)
+drawMapV2(dataVater, blauTon, size = 1)
 
 ```
 
 ### size = 1.5
 ```{r}
-drawMapV1(dataVater, "blue", size = 1.5)
+# drawMapV1(dataVater, "blue", size = 1.5)
 
-# füge Leerzeilen im html ein
-txt <- paste("<br><br><br>")
-knitr::asis_output(htmltools::HTML(txt))
+# # füge Leerzeilen im html ein
+# txt <- paste("<br><br><br>")
+# knitr::asis_output(htmltools::HTML(txt))
 
-drawMapV2(dataVater, "blue", size = 1.5)
+drawMapV2(dataVater, blauTon, size = 1.5)
 
 ```
 
 ### size = 2
 ```{r}
-drawMapV1(dataVater, "blue", size = 2)
+# drawMapV1(dataVater, "blue", size = 2)
 
-# füge Leerzeilen im html ein
-txt <- paste("<br><br><br>")
-knitr::asis_output(htmltools::HTML(txt))
+# # füge Leerzeilen im html ein
+# txt <- paste("<br><br><br>")
+# knitr::asis_output(htmltools::HTML(txt))
 
-drawMapV2(dataVater, "blue", size = 2)
+drawMapV2(dataVater, blauTon, size = 2)
 
 ```
 
@@ -1114,11 +532,11 @@ drawMapV2(dataVater, "blue", size = 2)
 
 ### size = 1
 ```{r}
-drawMapV1(dataMutter, "red", size = 1)
+# drawMapV1(dataMutter, "red", size = 1)
 
-# füge Leerzeilen im html ein
-txt <- paste("<br><br><br>")
-knitr::asis_output(htmltools::HTML(txt))
+# # füge Leerzeilen im html ein
+# txt <- paste("<br><br><br>")
+# knitr::asis_output(htmltools::HTML(txt))
 
 drawMapV2(dataMutter, "red", size = 1)
 
@@ -1126,11 +544,11 @@ drawMapV2(dataMutter, "red", size = 1)
 
 ### size = 1.5
 ```{r}
-drawMapV1(dataMutter, "red", size = 1.5)
+# drawMapV1(dataMutter, "red", size = 1.5)
 
-# füge Leerzeilen im html ein
-txt <- paste("<br><br><br>")
-knitr::asis_output(htmltools::HTML(txt))
+# # füge Leerzeilen im html ein
+# txt <- paste("<br><br><br>")
+# knitr::asis_output(htmltools::HTML(txt))
 
 drawMapV2(dataMutter, "red", size = 1.5)
 
@@ -1138,11 +556,11 @@ drawMapV2(dataMutter, "red", size = 1.5)
 
 ### size = 2
 ```{r}
-drawMapV1(dataMutter, "red", size = 2)
+# drawMapV1(dataMutter, "red", size = 2)
 
-# füge Leerzeilen im html ein
-txt <- paste("<br><br><br>")
-knitr::asis_output(htmltools::HTML(txt))
+# # füge Leerzeilen im html ein
+# txt <- paste("<br><br><br>")
+# knitr::asis_output(htmltools::HTML(txt))
 
 drawMapV2(dataMutter, "red", size = 2)
 
