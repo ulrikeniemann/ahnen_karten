@@ -406,11 +406,6 @@ leaflet(options = leafletOptions(attributionControl = FALSE), data) |>
 ## Karten Wanderungen
 
 
-
-In zwei Versionen: 
-
-V1: Pfeilspitzen in der Mitte + V2: Pfeilspitzen + Bubble am Ende (da wo das Kind geboren wurde).
-
 Als Popup jeweils der Name der Eltern (Kind-Name fehlte im Datensatz, könnte aber ergänzt werden).
 
 ```{r}
